@@ -1,6 +1,11 @@
+"use client";
+
 import { SlidingText } from "@/components/ui/sliding-text";
+import { useWallet } from '@solana/wallet-adapter-react';
 
 export default function Home() {
+  const { connected } = useWallet();
+
   return (
     <main className="min-h-screen">
       <div className="relative min-h-screen flex flex-col items-center justify-center">
@@ -15,6 +20,11 @@ export default function Home() {
               duration={3000}
             />
           </div>
+          {connected && (
+            <div className="mt-8 text-emerald-600">
+              Welcome to AgroX! Your wallet is connected.
+            </div>
+          )}
         </div>
       </div>
     </main>
