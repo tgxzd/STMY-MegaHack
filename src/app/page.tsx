@@ -4,7 +4,7 @@ import { SlidingText } from "@/components/ui/sliding-text";
 import { useWallet } from '@solana/wallet-adapter-react';
 
 export default function Home() {
-  const { connected } = useWallet();
+  useWallet();
 
   return (
     <main className="min-h-screen">

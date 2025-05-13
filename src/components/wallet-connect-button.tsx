@@ -9,7 +9,7 @@ interface WalletConnectButtonProps {
 }
 
 export function WalletConnectButton({ className }: WalletConnectButtonProps) {
-  const { connected, disconnect, wallet, publicKey } = useWallet();
+  const { connected, disconnect, publicKey } = useWallet();
   const { setVisible } = useWalletModal();
 
   const handleClick = () => {
