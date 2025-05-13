@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Node, nodesData } from '@/data/nodes';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { NodeStatsCard } from '@/components/ui/NodeStatsCard';
 
 export default function NodeDetailPage() {
   const params = useParams();
@@ -84,7 +85,24 @@ export default function NodeDetailPage() {
             </div>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Node stats graphs */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <NodeStatsCard 
+              type="uptime"
+              currentValue={node.uptime}
+              maxValue={24}
+              title="Today's Uptime"
+              unit="hours"
+            />
+            <NodeStatsCard 
+              type="usage"
+              currentValue={node.usage}
+              maxValue={10}
+              title="Today's Usage"
+              unit="GB"
+            />
+          </div>
+          
             <div className="bg-black/50 rounded-lg border border-white/10 p-6">
               <h2 className="text-lg font-medium text-white mb-4">Node Details</h2>
               <div className="space-y-3">
@@ -97,32 +115,8 @@ export default function NodeDetailPage() {
                   <span className="text-white">{node.totalDataTransmitted}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-white/70">Today's Uptime:</span>
-                  <span className="text-white">{node.uptime} hours</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/70">Today's Usage:</span>
-                  <span className="text-white">{node.usage}</span>
-                </div>
-                <div className="flex justify-between">
                   <span className="text-white/70">Today's Rewards:</span>
                   <span className="text-white">{node.reward} Pts</span>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-black/50 rounded-lg border border-white/10 p-6">
-              <h2 className="text-lg font-medium text-white mb-4">Actions</h2>
-              <div className="space-y-3">
-                <button className="w-full bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg transition-all duration-200">
-                  Restart Node
-                </button>
-                <button className="w-full bg-transparent hover:bg-white/10 text-white border border-white/20 px-4 py-2 rounded-lg transition-all duration-200">
-                  View Logs
-                </button>
-                <button className="w-full bg-transparent hover:bg-white/10 text-white border border-white/20 px-4 py-2 rounded-lg transition-all duration-200">
-                  Update Configuration
-                </button>
               </div>
             </div>
           </div>

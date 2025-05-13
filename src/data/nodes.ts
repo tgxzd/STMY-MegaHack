@@ -23,10 +23,10 @@ export const nodesData: Node[] = [
   {
     nodeID: "NODE-002",
     nodeName: "Beta Node",
-    status: "disconnected",
-    uptime: 0,
-    usage: 0,
-    reward: 0,
+    status: "connected",
+    uptime: 12,
+    usage: 4,
+    reward: 40,
     activationDate: "2024-02-01",
     totalDataTransmitted: "0MB"
   },
