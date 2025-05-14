@@ -5,6 +5,7 @@ import { Node, nodesData } from '@/data/nodes';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { NodeStatsCard } from '@/components/ui/NodeStatsCard';
+import { sensorData } from '@/data/sensor';
 
 export default function NodeDetailPage() {
   const params = useParams();
@@ -30,6 +31,14 @@ export default function NodeDetailPage() {
   const handleStop = () => {
     if (node) {
       setNode({...node, status: 'inactive'});
+    }
+  };
+
+  const handleClaimReward = () => {
+    if (node) {
+      // Here you would handle the reward claiming logic
+      console.log(`Claiming reward for node: ${node.nodeName}`);
+      alert(`Claimed ${node.reward} Pts reward successfully!`);
     }
   };
 
@@ -130,6 +139,12 @@ export default function NodeDetailPage() {
                 Stop
               </button>
               <button
+                onClick={handleClaimReward}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500/30 text-amber-300 border border-amber-400 hover:bg-amber-500/50 transition-all duration-200"
+              >
+                Claim Reward
+              </button>
+              <button
                 onClick={() => setShowPlantModal(true)}
                 className="px-3 py-1.5 rounded-lg text-sm font-medium bg-purple-500/30 text-purple-300 border border-purple-400 hover:bg-purple-500/50 transition-all duration-200"
               >
@@ -170,6 +185,21 @@ export default function NodeDetailPage() {
               <div className="flex justify-between">
                 <span className="text-white/70">Today's Rewards:</span>
                 <span className="text-white">{node.reward} Pts</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-black/50 rounded-lg border border-white/10 p-6 mb-6">
+            <h2 className="text-lg font-medium text-white mb-4">Dataset</h2>
+            <div className="grid grid-cols-1 gap-4">
+              <div 
+                onClick={() => window.location.href = `/plant-data/${sensorData.plantID}`} 
+                className="bg-black/40 border border-emerald-500/30 rounded-lg p-4 flex flex-col items-center cursor-pointer hover:bg-emerald-900/20 hover:border-emerald-500/50 transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg hover:shadow-emerald-500/20"
+              >
+                
+                <div className="text-white font-medium text-lg">{sensorData.plantName}</div>
+                
+                <div className="mt-2 bg-emerald-500/20 px-3 py-1 rounded-full text-xs text-emerald-300">View Dataset</div>
               </div>
             </div>
           </div>
