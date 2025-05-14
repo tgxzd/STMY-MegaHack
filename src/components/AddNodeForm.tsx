@@ -16,7 +16,7 @@ export default function AddNodeForm({ isOpen, onClose, onSubmit }: AddNodeFormPr
     onClose();
   };
 
-  if (!isOpen) return null;
+  if (!isOpen) return null; 
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50">
@@ -35,16 +35,14 @@ export default function AddNodeForm({ isOpen, onClose, onSubmit }: AddNodeFormPr
         
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label htmlFor="nodeName" className="block text-sm font-medium text-white/70 mb-2">
-              Node Name
-            </label>
+            
             <input
               type="text"
               id="nodeName"
               value={nodeName}
               onChange={(e) => setNodeName(e.target.value)}
               className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 outline-none transition-all text-white/90 placeholder-white/40"
-              placeholder="Enter node name"
+              placeholder="Enter serial number"
               required
             />
           </div>
