@@ -76,13 +76,49 @@ export default function PlantDataPage() {
         
         <div className="bg-black/80 backdrop-blur-md rounded-xl border border-white/10 overflow-hidden shadow-xl p-8">
           <div className="flex flex-col md:flex-row gap-6 mb-8">
-            <div className="md:w-1/3 relative h-64 md:h-auto overflow-hidden rounded-xl border border-white/10">
-              <Image 
-                src={sensorData.image} 
-                alt={sensorData.plantName}
-                fill
-                className="object-cover"
-              />
+            <div className="md:w-1/3">
+              <div className="grid grid-cols-2 gap-2 p-2 bg-black/40 rounded-xl border border-white/10">
+                <div className="relative">
+                  <div className="absolute top-2 left-2 bg-emerald-500/80 px-2 py-1 rounded text-xs font-bold text-white shadow-lg z-10">Day 1</div>
+                  <Image 
+                    src={sensorData.image} 
+                    alt={`${sensorData.plantName} - Day 1`}
+                    width={150}
+                    height={150}
+                    className="rounded-lg object-cover w-full h-32 hover:scale-105 transition-transform duration-300 border border-white/10"
+                  />
+                </div>
+                <div className="relative">
+                  <div className="absolute top-2 left-2 bg-emerald-500/80 px-2 py-1 rounded text-xs font-bold text-white shadow-lg z-10">Day 2</div>
+                  <Image 
+                    src={sensorData.image} 
+                    alt={`${sensorData.plantName} - Day 2`}
+                    width={150}
+                    height={150}
+                    className="rounded-lg object-cover w-full h-32 hover:scale-105 transition-transform duration-300 border border-white/10"
+                  />
+                </div>
+                <div className="relative">
+                  <div className="absolute top-2 left-2 bg-emerald-500/80 px-2 py-1 rounded text-xs font-bold text-white shadow-lg z-10">Day 3</div>
+                  <Image 
+                    src={sensorData.image} 
+                    alt={`${sensorData.plantName} - Day 3`}
+                    width={150}
+                    height={150}
+                    className="rounded-lg object-cover w-full h-32 hover:scale-105 transition-transform duration-300 border border-white/10"
+                  />
+                </div>
+                <div className="relative">
+                  <div className="absolute top-2 left-2 bg-emerald-500/80 px-2 py-1 rounded text-xs font-bold text-white shadow-lg z-10">Day 4</div>
+                  <Image 
+                    src={sensorData.image} 
+                    alt={`${sensorData.plantName} - Day 4`}
+                    width={150}
+                    height={150}
+                    className="rounded-lg object-cover w-full h-32 hover:scale-105 transition-transform duration-300 border border-white/10"
+                  />
+                </div>
+              </div>
             </div>
             
             <div className="md:w-2/3">
@@ -139,35 +175,7 @@ export default function PlantDataPage() {
             </div>
           </div>
           
-          <div className="bg-black/50 rounded-lg border border-white/10 p-6">
-            <h2 className="text-lg font-medium text-white mb-6">Plant Health Indicators</h2>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-black/40 rounded-lg border border-emerald-500/30 p-4">
-                <div className="text-white/70 text-sm mb-2">Growth Rate</div>
-                <div className="h-3 bg-black/50 rounded-full overflow-hidden">
-                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: '75%' }}></div>
-                </div>
-                <div className="text-emerald-400 text-right text-sm mt-1">75%</div>
-              </div>
-              
-              <div className="bg-black/40 rounded-lg border border-emerald-500/30 p-4">
-                <div className="text-white/70 text-sm mb-2">Nutrient Levels</div>
-                <div className="h-3 bg-black/50 rounded-full overflow-hidden">
-                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: '60%' }}></div>
-                </div>
-                <div className="text-emerald-400 text-right text-sm mt-1">60%</div>
-              </div>
-              
-              <div className="bg-black/40 rounded-lg border border-emerald-500/30 p-4">
-                <div className="text-white/70 text-sm mb-2">Water Content</div>
-                <div className="h-3 bg-black/50 rounded-full overflow-hidden">
-                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: '85%' }}></div>
-                </div>
-                <div className="text-emerald-400 text-right text-sm mt-1">85%</div>
-              </div>
-            </div>
-          </div>
+          
         </div>
       </div>
     </main>

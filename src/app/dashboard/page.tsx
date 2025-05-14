@@ -18,25 +18,31 @@ export default function Dashboard() {
               plantName={sensorData.plantName}
             />
             
-            <div className="mt-8 flex justify-center">
-              <div className="bg-gradient-to-br from-black to-gray-800 p-3 rounded-xl max-w-xs shadow-xl border border-gray-700">
-                <div className="relative overflow-hidden rounded-lg transform transition-transform duration-300 hover:scale-105">
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent z-10"></div>
-                  <Image 
-                    src={sensorData.image}
-                    alt={sensorData.plantName}
-                    width={300}
-                    height={200}
-                    style={{ objectFit: 'cover', width: '100%', height: 'auto' }}
-                    className="rounded-lg"
-                  />
-                  <div className="absolute bottom-0 left-0 right-0 p-3 z-20">
-                    
-                    <div className="flex items-center mt-1 text-xs text-gray-300">
-
+            <div className="mt-12 bg-gradient-to-b from-gray-900/50 to-black/30 p-6 rounded-2xl border border-gray-800">
+              <div className="flex items-center justify-center mb-6">
+                
+              </div>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+                {['Day 1', 'Day 2', 'Day 3', 'Day 4'].map((day, index) => (
+                  <div key={index} className="group relative">
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-600/20 to-emerald-500/30 rounded-xl blur opacity-40 group-hover:opacity-70 transition duration-300"></div>
+                    <div className="bg-gradient-to-br from-gray-900 to-black p-3 rounded-xl shadow-xl backdrop-blur-sm border border-gray-800 relative">
+                      <div className="absolute top-3 right-3 bg-black/60 text-emerald-400 px-2 py-1 rounded-full text-xs font-medium z-30">{day}</div>
+                      <div className="relative overflow-hidden rounded-lg transform transition-all duration-500 group-hover:scale-[1.02]">
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent z-10"></div>
+                        <Image 
+                          src={sensorData.image}
+                          alt={`${sensorData.plantName} - ${day}`}
+                          width={300}
+                          height={200}
+                          style={{ objectFit: 'cover', width: '100%', height: 'auto' }}
+                          className="rounded-lg"
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
+                ))}
               </div>
             </div>
           </div>

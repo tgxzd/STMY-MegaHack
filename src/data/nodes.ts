@@ -6,7 +6,7 @@ export interface Node {
   usage: number;
   reward: number;
   activationDate: string;
-  totalDataTransmitted: string;
+  
 }
 
 export const nodesData: Node[] = [
@@ -18,7 +18,7 @@ export const nodesData: Node[] = [
     usage: 3,
     reward: 35,
     activationDate: "2024-01-15",
-    totalDataTransmitted: "0.8MB"
+  
   },
   
 ]; 

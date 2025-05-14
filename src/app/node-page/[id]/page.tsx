@@ -178,10 +178,7 @@ export default function NodeDetailPage() {
                 <span className="text-white/70">Activation Date:</span>
                 <span className="text-white">{node.activationDate}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-white/70">Total Data Transmitted:</span>
-                <span className="text-white">{node.totalDataTransmitted}</span>
-              </div>
+              
               <div className="flex justify-between">
                 <span className="text-white/70">Today's Rewards:</span>
                 <span className="text-white">{node.reward} Pts</span>

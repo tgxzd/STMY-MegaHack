@@ -55,6 +55,16 @@ export default function Navbar() {
               <span>Nodes</span>
             </Link>
 
+            <Link
+              href="/dataset"
+              className={`flex items-center space-x-2 px-4 py-2 rounded-md text-base lg:text-lg font-semibold transition-colors duration-200
+                ${isActive('/dataset') 
+                  ? 'text-emerald-700' 
+                  : 'text-emerald-700 hover:text-emerald-800'}`}
+            >
+              <span>Dataset</span>
+            </Link>
+
             
           </div>
 
@@ -122,6 +132,16 @@ export default function Navbar() {
                 Nodes
               </Link>
 
+              <Link
+                href="/dataset"
+                className={`block px-3 py-2 rounded-md text-base font-medium transition-colors duration-200
+                  ${isActive('/dataset') 
+                    ? 'text-emerald-700 bg-emerald-50' 
+                    : 'text-emerald-700 hover:bg-emerald-50'}`}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Dataset
+              </Link>
               
             </div>
           </div>
