@@ -1,7 +1,7 @@
 export interface Node {
   nodeID: string;
   nodeName: string;
-  status: 'connected' | 'disconnected';
+  status: 'connected' | 'disconnected' | 'active' | 'inactive';
   uptime: number;
   usage: number;
   reward: number;

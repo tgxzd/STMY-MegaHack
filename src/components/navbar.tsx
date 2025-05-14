@@ -55,15 +55,7 @@ export default function Navbar() {
               <span>Nodes</span>
             </Link>
 
-            <Link
-              href="/reward"
-              className={`flex items-center space-x-2 px-4 py-2 rounded-md text-base lg:text-lg font-semibold transition-colors duration-200
-                ${isActive('/reward') 
-                  ? 'text-emerald-700' 
-                  : 'text-emerald-700 hover:text-emerald-800'}`}
-            >
-              <span>Rewards</span>
-            </Link>
+            
           </div>
 
           {/* Desktop Wallet Connect */}
@@ -130,16 +122,7 @@ export default function Navbar() {
                 Nodes
               </Link>
 
-              <Link
-                href="/reward"
-                className={`block px-3 py-2 rounded-md text-base font-medium transition-colors duration-200
-                  ${isActive('/reward') 
-                    ? 'text-emerald-700 bg-emerald-50' 
-                    : 'text-emerald-700 hover:bg-emerald-50'}`}
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Rewards
-              </Link>
+              
             </div>
           </div>
         )}

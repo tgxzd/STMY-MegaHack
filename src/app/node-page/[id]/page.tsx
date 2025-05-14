@@ -11,6 +11,8 @@ export default function NodeDetailPage() {
   const nodeId = params.id as string;
   const [node, setNode] = useState<Node | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showPlantModal, setShowPlantModal] = useState(false);
+  const [plantName, setPlantName] = useState('');
 
   useEffect(() => {
     // Find the node by ID
@@ -18,6 +20,27 @@ export default function NodeDetailPage() {
     setNode(foundNode || null);
     setLoading(false);
   }, [nodeId]);
+
+  const handleStart = () => {
+    if (node) {
+      setNode({...node, status: 'active'});
+    }
+  };
+
+  const handleStop = () => {
+    if (node) {
+      setNode({...node, status: 'inactive'});
+    }
+  };
+
+  const handleCreatePlant = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Here you would handle the plant creation logic
+    console.log(`Creating plant: ${plantName}`);
+    // Reset form and close modal
+    setPlantName('');
+    setShowPlantModal(false);
+  };
 
   if (loading) {
     return (
@@ -73,15 +96,45 @@ export default function NodeDetailPage() {
               <h1 className="text-2xl font-bold text-white">{node.nodeName}</h1>
               <p className="text-white/50">ID: {node.nodeID}</p>
             </div>
-            <div className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${
-              node.status === 'connected' 
-                ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-400' 
-                : 'bg-red-500/30 text-red-300 border border-red-400'
-            }`}>
-              <span className={`w-2 h-2 rounded-full mr-1.5 ${
-                node.status === 'connected' ? 'bg-emerald-300' : 'bg-red-300'
-              }`}></span>
-              {node.status}
+            <div className="flex items-center space-x-3">
+              <div className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${
+                node.status === 'connected' || node.status === 'active'
+                  ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-400' 
+                  : 'bg-red-500/30 text-red-300 border border-red-400'
+              }`}>
+                <span className={`w-2 h-2 rounded-full mr-1.5 ${
+                  node.status === 'connected' || node.status === 'active' ? 'bg-emerald-300' : 'bg-red-300'
+                }`}></span>
+                {node.status === 'connected' || node.status === 'active' ? 'active' : 'inactive'}
+              </div>
+              <button
+                onClick={handleStart}
+                disabled={node.status === 'connected' || node.status === 'active'}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  node.status === 'connected' || node.status === 'active'
+                    ? 'bg-emerald-500/20 text-emerald-300/50 cursor-not-allowed'
+                    : 'bg-emerald-500/30 text-emerald-300 border border-emerald-400 hover:bg-emerald-500/50'
+                }`}
+              >
+                Start
+              </button>
+              <button
+                onClick={handleStop}
+                disabled={node.status === 'disconnected' || node.status === 'inactive'}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  node.status === 'disconnected' || node.status === 'inactive'
+                    ? 'bg-red-500/20 text-red-300/50 cursor-not-allowed'
+                    : 'bg-red-500/30 text-red-300 border border-red-400 hover:bg-red-500/50'
+                }`}
+              >
+                Stop
+              </button>
+              <button
+                onClick={() => setShowPlantModal(true)}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-purple-500/30 text-purple-300 border border-purple-400 hover:bg-purple-500/50 transition-all duration-200"
+              >
+                Create Plant
+              </button>
             </div>
           </div>
           
@@ -103,25 +156,63 @@ export default function NodeDetailPage() {
             />
           </div>
           
-            <div className="bg-black/50 rounded-lg border border-white/10 p-6">
-              <h2 className="text-lg font-medium text-white mb-4">Node Details</h2>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-white/70">Activation Date:</span>
-                  <span className="text-white">{node.activationDate}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/70">Total Data Transmitted:</span>
-                  <span className="text-white">{node.totalDataTransmitted}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/70">Today's Rewards:</span>
-                  <span className="text-white">{node.reward} Pts</span>
+          <div className="bg-black/50 rounded-lg border border-white/10 p-6 mb-6">
+            <h2 className="text-lg font-medium text-white mb-4">Node Details</h2>
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-white/70">Activation Date:</span>
+                <span className="text-white">{node.activationDate}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/70">Total Data Transmitted:</span>
+                <span className="text-white">{node.totalDataTransmitted}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/70">Today's Rewards:</span>
+                <span className="text-white">{node.reward} Pts</span>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Plant Creation Modal */}
+      {showPlantModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4">
+          <div className="bg-black/90 backdrop-blur-md rounded-xl border border-white/10 p-8 w-full max-w-md">
+            <h3 className="text-xl font-bold text-white mb-4">Create New Plant</h3>
+            <form onSubmit={handleCreatePlant}>
+              <div className="mb-6">
+                <label htmlFor="plantName" className="block text-white/70 mb-2">Plant Name</label>
+                <input
+                  type="text"
+                  id="plantName"
+                  value={plantName}
+                  onChange={(e) => setPlantName(e.target.value)}
+                  className="w-full bg-black/50 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
+                  placeholder="Enter plant name"
+                  required
+                />
+              </div>
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowPlantModal(false)}
+                  className="px-4 py-2 border border-white/20 text-white/70 rounded-lg hover:bg-white/10 transition-all duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-all duration-200"
+                >
+                  Create
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 } 

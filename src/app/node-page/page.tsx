@@ -21,7 +21,7 @@ export default function NodePage() {
     const newNode: Node = {
       nodeID: `NODE-${String(nodes.length + 1).padStart(3, '0')}`,
       nodeName: nodeName,
-      status: 'connected',
+      status: 'active',
       uptime: 0,
       usage: 0,
       reward: 0,
@@ -73,14 +73,16 @@ export default function NodePage() {
                 
                 <div className="flex justify-center items-center">
                   <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                    node.status === 'connected' 
+                    node.status === 'connected' || node.status === 'active'
                       ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-400' 
                       : 'bg-red-500/30 text-red-300 border border-red-400'
                   }`}>
                     <span className={`w-2 h-2 rounded-full mr-1.5 ${
-                      node.status === 'connected' ? 'bg-emerald-300' : 'bg-red-300'
+                      node.status === 'connected' || node.status === 'active' ? 'bg-emerald-300' : 'bg-red-300'
                     }`}></span>
-                    {node.status}
+                    {node.status === 'connected' ? 'active' : 
+                     node.status === 'disconnected' ? 'inactive' : 
+                     node.status}
                   </span>
                 </div>
                 
