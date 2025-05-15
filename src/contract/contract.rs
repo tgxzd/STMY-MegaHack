@@ -2,14 +2,14 @@ use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::anchor::{commit, delegate, ephemeral};
 use ephemeral_rollups_sdk::cpi::DelegateConfig;
 use ephemeral_rollups_sdk::ephem::{commit_accounts, commit_and_undelegate_accounts};
-declare_id!("AAPzpAmDnGAhd2RvDUCMisVjJ2ydTKeNfZXmoz5e4pp9");
+declare_id!("3cSyEVxE9yXDYiWa6cDo5cZZr8hFE567ZBBCTZHTdsHn");
 
 pub const AGROX_PDA_SEED: &[u8] = b"agrox";
 
 #[ephemeral]
 #[program]
 pub mod agrox_contract {
-    use super::*;
+    use super::*;   
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let system_state = &mut ctx.accounts.system_state;
@@ -36,7 +36,7 @@ pub mod agrox_contract {
     }
 
     /// Undelegate the account from the delegation program
-    pub fn undelegate(ctx: Context<UndelegateInput>) -> Result<()> {
+    pub fn undelegate(ctx: Context<UndelegateAccounts>) -> Result<()> {
         commit_and_undelegate_accounts(
             &ctx.accounts.payer,
             vec![&ctx.accounts.pda.to_account_info()],
@@ -376,18 +376,6 @@ pub struct GenerateMachineAuth<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[derive(Accounts)]
-pub struct UndelegateInput<'info> {
-    pub payer: Signer<'info>,
-    /// CHECK: The PDA to undelegate
-    #[account(mut)]
-    pub pda: AccountInfo<'info>,
-    /// CHECK: The magic context account
-    pub magic_context: AccountInfo<'info>,
-    /// CHECK: The magic program
-    pub magic_program: AccountInfo<'info>,
-}
-
 #[account]
 pub struct SystemState {
     pub authority: Pubkey,
@@ -500,5 +488,15 @@ pub struct DelegateInput<'info> {
     pub payer: Signer<'info>,
     /// CHECK The pda to delegate
     #[account(mut, del)]
+    pub pda: AccountInfo<'info>,
+}
+
+#[commit]
+#[derive(Accounts)]
+pub struct UndelegateAccounts<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    /// CHECK: The PDA to undelegate
+    #[account(mut)]
     pub pda: AccountInfo<'info>,
 }

@@ -1,4 +1,4 @@
-Example call - http://121.122.126.19:8000/api/images/latest
+Example call - http://192.168.1.26:8000/api/images/latest
 
 Data Endpoints
 GET /api/sensor - Get latest sensor data (temperature and humidity)
@@ -12,3 +12,5 @@ Log Endpoints
 GET /api/logs/list - List all available log files
 GET /api/logs/today - Get today's sensor log file (CSV)
 GET /api/logs/{log_name} - Get a specific log file by name
+
+Fetch image endpoint http://192.168.1.26:3005/api/upload-image
