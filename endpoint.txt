@@ -1,0 +1,14 @@
+Example call - http://121.122.126.19:8000/api/images/latest
+
+Data Endpoints
+GET /api/sensor - Get latest sensor data (temperature and humidity)
+GET /api/images/latest - Get the latest captured image
+GET /api/images/list - List all available images
+GET /api/images/{image_name} - Get a specific image
+Control Endpoints
+GET /api/control/status - Check the current status of sensor and camera
+POST /api/control - Unified endpoint to control both sensor and camera (JSON body)
+Log Endpoints
+GET /api/logs/list - List all available log files
+GET /api/logs/today - Get today's sensor log file (CSV)
+GET /api/logs/{log_name} - Get a specific log file by name
