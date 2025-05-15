@@ -1,5 +1,5 @@
 {
-  "address": "CWDF2qKJp68SfMV9iqo8Ao1SiEWV1a3CXLLQbmaMPouo",
+  "address": "5AcbpD3VGWLsLVrVpXZsDUvitNdbCCGL82B27MYsPsuG",
   "metadata": {
     "name": "agrox_contract",
     "version": "0.1.0",
@@ -131,38 +131,38 @@
             "program": {
               "kind": "const",
               "value": [
-                170,
-                236,
                 61,
-                220,
-                45,
-                64,
-                91,
-                77,
-                38,
-                193,
-                83,
-                26,
-                11,
-                162,
-                238,
-                14,
-                180,
-                215,
+                229,
+                58,
+                114,
+                81,
+                194,
+                233,
+                168,
                 7,
-                200,
-                55,
-                105,
-                156,
-                184,
-                64,
-                89,
-                39,
-                109,
-                150,
-                91,
-                31,
-                190
+                106,
+                135,
+                133,
+                241,
+                203,
+                106,
+                98,
+                103,
+                232,
+                87,
+                108,
+                6,
+                106,
+                249,
+                24,
+                120,
+                113,
+                114,
+                136,
+                254,
+                206,
+                84,
+                207
               ]
             }
           }
@@ -247,7 +247,7 @@
         },
         {
           "name": "owner_program",
-          "address": "CWDF2qKJp68SfMV9iqo8Ao1SiEWV1a3CXLLQbmaMPouo"
+          "address": "5AcbpD3VGWLsLVrVpXZsDUvitNdbCCGL82B27MYsPsuG"
         },
         {
           "name": "delegation_program",
@@ -572,29 +572,7 @@
         },
         {
           "name": "data",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  97,
-                  103,
-                  114,
-                  111,
-                  120
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "machine"
-              },
-              {
-                "kind": "account",
-                "path": "plant"
-              }
-            ]
-          }
+          "writable": true
         },
         {
           "name": "auth_pda",

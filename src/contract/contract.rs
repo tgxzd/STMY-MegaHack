@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::anchor::{commit, delegate, ephemeral};
 use ephemeral_rollups_sdk::cpi::DelegateConfig;
 use ephemeral_rollups_sdk::ephem::{commit_accounts, commit_and_undelegate_accounts};
-declare_id!("CWDF2qKJp68SfMV9iqo8Ao1SiEWV1a3CXLLQbmaMPouo");
+declare_id!("5AcbpD3VGWLsLVrVpXZsDUvitNdbCCGL82B27MYsPsuG");
 
 pub const AGROX_PDA_SEED: &[u8] = b"agrox";
 
@@ -12,17 +12,17 @@ pub mod agrox_contract {
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        let system_state = &mut ctx.accounts.system_state;
-        system_state.authority = ctx.accounts.authority.key();
-        system_state.machine_count = 0;
-        system_state.total_data_uploads = 0;
-        system_state.data_request_count = 0;
-        system_state.plant_count = 0;
-        system_state.machines = Vec::new();
-        system_state.plants = Vec::new();
-        system_state.bump = ctx.bumps.system_state;
+        let cluster = &mut ctx.accounts.cluster;
+        cluster.authority = ctx.accounts.authority.key();
+        cluster.machine_count = 0;
+        cluster.total_data_uploads = 0;
+        cluster.data_request_count = 0;
+        cluster.plant_count = 0;
+        cluster.machines = Vec::new();
+        cluster.plants = Vec::new();
+        cluster.bump = ctx.bumps.cluster;
 
-        msg!("AgroX system initialized by: {}", system_state.authority);
+        msg!("AgroX system initialized by: {}", cluster.authority);
         Ok(())
     }
 
@@ -49,7 +49,7 @@ pub mod agrox_contract {
 
     pub fn register_machine(ctx: Context<RegisterMachine>, machine_id: String) -> Result<()> {
         // Validate machine ID isn't already used
-        let machines = &ctx.accounts.system_state.machines;
+        let machines = &ctx.accounts.cluster.machines;
         require!(!machines.iter().any(|(id, _)| id == &machine_id), ErrorCode::MachineIdAlreadyExists);
 
         // Create and initialize the machine account
@@ -71,10 +71,10 @@ pub mod agrox_contract {
         let (_, auth_bump) = find_machine_auth_pda(ctx.program_id, &machine_id);
         machine.auth_bump = auth_bump;
 
-        // Add machine to system state
-        let system_state = &mut ctx.accounts.system_state;
-        system_state.machines.push((machine_id.clone(), ctx.accounts.machine.key()));
-        system_state.machine_count += 1;
+        // Add machine to cluster
+        let cluster = &mut ctx.accounts.cluster;
+        cluster.machines.push((machine_id.clone(), ctx.accounts.machine.key()));
+        cluster.machine_count += 1;
 
         msg!("Machine registered: {}", machine_id);
         Ok(())
@@ -93,10 +93,10 @@ pub mod agrox_contract {
         plant.last_update_timestamp = 0;
         plant.bump = ctx.bumps.plant;
 
-        // Add plant to system state
-        let system_state = &mut ctx.accounts.system_state;
-        system_state.plants.push((plant_name.clone(), ctx.accounts.plant.key()));
-        system_state.plant_count += 1;
+        // Add plant to cluster
+        let cluster = &mut ctx.accounts.cluster;
+        cluster.plants.push((plant_name.clone(), ctx.accounts.plant.key()));
+        cluster.plant_count += 1;
 
         msg!("Plant created: {}", plant_name);
         Ok(())
@@ -135,7 +135,7 @@ pub mod agrox_contract {
         image_url: Option<String>,
     ) -> Result<()> {
         let machine = &mut ctx.accounts.machine;
-        let system_state = &mut ctx.accounts.system_state;
+        let cluster = &mut ctx.accounts.cluster;
         let plant = &mut ctx.accounts.plant;
         let data = &mut ctx.accounts.data;
         let clock = Clock::get()?;
@@ -159,12 +159,12 @@ pub mod agrox_contract {
         // Add the entry to the data vector
         data.data_entries.push(new_entry);
         
-        // Update machine, plant and system state
+        // Update machine, plant and cluster
         machine.data_count += 1;
         machine.last_data_timestamp = clock.unix_timestamp;
         plant.data_count += 1;
         plant.last_update_timestamp = clock.unix_timestamp;
-        system_state.total_data_uploads += 1;
+        cluster.total_data_uploads += 1;
         
         // Check if this upload includes an image
         if image_url.is_some() {
@@ -187,7 +187,7 @@ pub mod agrox_contract {
         let data = &mut ctx.accounts.data;
         let machine = &mut ctx.accounts.machine;
         let user = &ctx.accounts.user;
-        let system_state = &mut ctx.accounts.system_state;
+        let cluster = &mut ctx.accounts.cluster;
         let entry_index = entry_index as usize;
         
         // Ensure the entry index is valid
@@ -196,7 +196,7 @@ pub mod agrox_contract {
         // Update usage count for the specific entry
         data.data_entries[entry_index].used_count += 1;
         machine.data_used_count += 1;
-        system_state.data_request_count += 1;
+        cluster.data_request_count += 1;
         
         // Calculate and apply rewards to machine owner
         let reward_amount = 2; // 2 tokens per data usage
@@ -247,10 +247,10 @@ pub fn find_machine_pda(program_id: &Pubkey, machine_id: &str) -> (Pubkey, u8) {
     )
 }
 
-// Helper function to find the system state PDA
-pub fn find_system_state_pda(program_id: &Pubkey) -> (Pubkey, u8) {
+// Helper function to find the cluster PDA
+pub fn find_cluster_pda(program_id: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[AGROX_PDA_SEED],
+        &[b"cluster"], 
         program_id,
     )
 }
@@ -282,11 +282,11 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = authority,
-        space = SystemState::SPACE,
-        seeds = [AGROX_PDA_SEED],
+        space = Cluster::SPACE,
+        seeds = [b"cluster"],
         bump
     )]
-    pub system_state: Account<'info, SystemState>,
+    pub cluster: Account<'info, Cluster>,
     
     #[account(mut)]
     pub authority: Signer<'info>,
@@ -297,8 +297,13 @@ pub struct Initialize<'info> {
 #[derive(Accounts)]
 #[instruction(machine_id: String)]
 pub struct RegisterMachine<'info> {
-    #[account(mut)]
-    pub system_state: Account<'info, SystemState>,
+    #[account(
+        mut,
+        realloc = Cluster::BASE_SPACE + (Cluster::MACHINE_ENTRY_SIZE * (cluster.machines.len() + 1)),
+        realloc::payer = user,
+        realloc::zero = false,
+    )]
+    pub cluster: Account<'info, Cluster>,
     
     #[account(
         init,
@@ -319,7 +324,7 @@ pub struct RegisterMachine<'info> {
 #[instruction(plant_name: String)]
 pub struct CreatePlant<'info> {
     #[account(mut)]
-    pub system_state: Account<'info, SystemState>,
+    pub cluster: Account<'info, Cluster>,
     
     #[account(
         init,
@@ -347,7 +352,7 @@ pub struct ControlMachine<'info> {
 #[derive(Accounts)]
 pub struct UploadData<'info> {
     #[account(mut)]
-    pub system_state: Account<'info, SystemState>,
+    pub cluster: Account<'info, Cluster>,
     
     #[account(
         mut,
@@ -357,20 +362,15 @@ pub struct UploadData<'info> {
 
     #[account(
         mut,
-        constraint = system_state.plants.iter().any(|(_, pubkey)| *pubkey == plant.key()) @ ErrorCode::UnregisteredPlant,
+        constraint = cluster.plants.iter().any(|(_, pubkey)| *pubkey == plant.key()) @ ErrorCode::UnregisteredPlant,
     )]
     pub plant: Account<'info, PlantData>,
     
     #[account(
-        init_if_needed,
-        payer = payer,
-        space = IoTData::space(100), // Allow for 100 data entries per machine-plant pair
-        seeds = [
-            AGROX_PDA_SEED,
-            machine.key().as_ref(),
-            plant.key().as_ref(),
-        ],
-        bump
+        mut,
+        realloc = IoTData::BASE_SPACE + (IoTData::ENTRY_SPACE * (data.data_entries.len() + 1)),
+        realloc::payer = payer,
+        realloc::zero = false,
     )]
     pub data: Account<'info, IoTData>,
     
@@ -393,7 +393,7 @@ pub struct UploadData<'info> {
 #[derive(Accounts)]
 pub struct UseData<'info> {
     #[account(mut)]
-    pub system_state: Account<'info, SystemState>,
+    pub cluster: Account<'info, Cluster>,
     
     #[account(mut)]
     pub machine: Account<'info, Machine>,
@@ -436,7 +436,7 @@ pub struct GenerateMachineAuth<'info> {
 }
 
 #[account]
-pub struct SystemState {
+pub struct Cluster {
     pub authority: Pubkey,
     pub machine_count: u64,
     pub total_data_uploads: u64,
@@ -447,16 +447,24 @@ pub struct SystemState {
     pub bump: u8,
 }
 
-impl SystemState {
-    pub const SPACE: usize = 8 + // discriminator
+impl Cluster {
+    pub const SPACE: usize = Self::BASE_SPACE; // Initially no machines or plants
+    
+    pub const BASE_SPACE: usize = 8 + // discriminator
                             32 + // authority
                             8 + // machine_count
                             8 + // total_data_uploads
                             8 + // data_request_count
                             8 + // plant_count
-                            500 + // machines vec (approx space)
-                            500 + // plants vec (approx space)
+                            4 + // machines vec length
+                            4 + // plants vec length
                             1; // bump
+                            
+    pub const MACHINE_ENTRY_SIZE: usize = 36 + // machine_id (max 32 chars + 4 bytes for length)
+                                        32; // pubkey
+                                        
+    pub const PLANT_ENTRY_SIZE: usize = 36 + // plant_name (max 32 chars + 4 bytes for length)
+                                      32; // pubkey
 }
 
 #[account]

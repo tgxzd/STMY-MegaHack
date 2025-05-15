@@ -4,31 +4,218 @@ import { useState, useEffect } from 'react';
 import AddNodeForm from '@/components/AddNodeForm';
 import { Node, nodesData } from '@/data/nodes';
 import Link from 'next/link';
+import * as anchor from '@coral-xyz/anchor';
+import { Program } from '@coral-xyz/anchor';
+import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react';
+import { PublicKey, SystemProgram } from '@solana/web3.js';
+import idl from '@/contract/idl.json';
+import { toast } from "sonner";
+
+const PROGRAM_ID = new PublicKey("5AcbpD3VGWLsLVrVpXZsDUvitNdbCCGL82B27MYsPsuG");
+
+// Define the type for machine accounts based on the IDL
+type MachineAccount = {
+  owner: PublicKey;
+  machineId: string;
+  isActive: boolean;
+  dataCount: number;
+  imageCount: number;
+  rewardsEarned: number;
+  lastDataTimestamp: number;
+  lastImageTimestamp: number;
+  dataUsedCount: number;
+  authBump: number;
+  bump: number;
+  publicKey: PublicKey;
+};
 
 export default function NodePage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [nodes, setNodes] = useState<Node[]>([]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [machineId, setMachineId] = useState("");
+  
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [registeredMachines, setRegisteredMachines] = useState<MachineAccount[]>([]);
+  const [isLoadingMachines, setIsLoadingMachines] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  const { connection } = useConnection();
+  const wallet = useAnchorWallet();
+
   useEffect(() => {
     // Load initial node data
     setNodes(nodesData);
-  }, []);
-
-  const handleAddNode = (nodeName: string) => {
     
-    console.log('Adding new node:', nodeName);
-   
-    const newNode: Node = {
-      nodeID: `NODE-${String(nodes.length + 1).padStart(3, '0')}`,
-      nodeName: nodeName,
-      status: 'active',
-      uptime: 0,
-      usage: 0,
-      reward: 0,
-      activationDate: new Date().toISOString().split('T')[0],
-      totalDataTransmitted: "0MB"
-    };
-    setNodes([...nodes, newNode]);
+    if (wallet) {
+      fetchAllMachines();
+    }
+  }, [wallet, connection]);
+
+  const getProgram = () => {
+    if (!wallet) return null;
+    
+    const provider = new anchor.AnchorProvider(
+      connection,
+      wallet,
+      { commitment: 'processed' }
+    );
+    
+    const program = new Program(idl as anchor.Idl, provider);
+    return program;
+  };
+
+  const fetchAllMachines = async () => {
+    try {
+      setIsLoadingMachines(true);
+      const program = getProgram();
+      if (!program || !wallet) {
+        console.log("Wallet not connected");
+        return;
+      }
+
+      // @ts-expect-error - Bypass TypeScript checks since account structure comes from IDL
+      const allMachines = await program.account.machine.all();
+      console.log("All machines:", allMachines);
+      
+      // Define the expected structure for the account
+      type MachineAccountRaw = {
+        owner: PublicKey;
+        machineId: string;
+        isActive: boolean;
+        dataCount: { toNumber: () => number };
+        imageCount: { toNumber: () => number };
+        rewardsEarned: { toNumber: () => number };
+        lastDataTimestamp: { toNumber: () => number };
+        lastImageTimestamp: { toNumber: () => number };
+        dataUsedCount: { toNumber: () => number };
+        authBump: number;
+        bump: number;
+      };
+      
+      // Transform data to match our expected format
+      const machineAccounts = allMachines.map((item: { account: MachineAccountRaw; publicKey: PublicKey }) => {
+        const account = item.account;
+        return {
+          owner: account.owner,
+          machineId: account.machineId,
+          isActive: account.isActive,
+          dataCount: account.dataCount.toNumber(),
+          imageCount: account.imageCount.toNumber(),
+          rewardsEarned: account.rewardsEarned.toNumber(),
+          lastDataTimestamp: account.lastDataTimestamp.toNumber(),
+          lastImageTimestamp: account.lastImageTimestamp.toNumber(),
+          dataUsedCount: account.dataUsedCount.toNumber(),
+          authBump: account.authBump,
+          bump: account.bump,
+          publicKey: item.publicKey,
+        };
+      });
+      
+      // Create Node objects from machine accounts
+      const machineNodes = machineAccounts.map(machine => ({
+        nodeID: machine.machineId,
+        nodeName: machine.machineId,
+        status: machine.isActive ? 'active' : 'inactive',
+        uptime: Math.floor(Math.random() * 24), // Random uptime for demo
+        usage: machine.dataCount + machine.imageCount,
+        reward: machine.rewardsEarned,
+        activationDate: new Date(machine.lastDataTimestamp * 1000).toISOString().split('T')[0],
+        totalDataTransmitted: `${machine.dataCount * 5}MB`
+      }));
+      
+      // Merge with any existing mock nodes
+      setNodes([...nodesData, ...machineNodes]);
+      setRegisteredMachines(machineAccounts);
+    } catch (error) {
+      console.error("Error fetching machines:", error);
+      toast?.error?.(`Failed to fetch machines: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsLoadingMachines(false);
+    }
+  };
+
+  const handleAddNode = async (nodeName: string) => {
+    try {
+      setIsRegistering(true);
+      setMachineId(nodeName);
+      
+      const program = getProgram();
+      
+      if (!program || !wallet) {
+        toast?.error?.("Wallet not connected");
+        return;
+      }
+
+      // Find the PDAs
+      const [clusterPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("cluster")],
+        PROGRAM_ID
+      );
+
+      // According to IDL, machine PDA uses "agrox" prefix, not "machine"
+      const [machinePda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("agrox"), Buffer.from(nodeName)],
+        PROGRAM_ID
+      );
+
+      console.log("Machine PDA being used:", machinePda.toBase58());
+
+      // Call the register_machine instruction
+      const tx = await program.methods
+        .registerMachine(nodeName)
+        .accounts({
+          cluster: clusterPda,
+          machine: machinePda,
+          user: wallet.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc({
+          skipPreflight: true,
+          commitment: 'confirmed',
+          maxRetries: 3
+        });
+      
+      toast?.success?.(`Machine ${nodeName} registered successfully`);
+      console.log("Transaction signature:", tx);
+      
+      // Add the new node to the UI immediately
+      const newNode: Node = {
+        nodeID: nodeName,
+        nodeName: nodeName,
+        status: 'active',
+        uptime: 0,
+        usage: 0,
+        reward: 0,
+        activationDate: new Date().toISOString().split('T')[0],
+        totalDataTransmitted: "0MB"
+      };
+      
+      setNodes([...nodes, newNode]);
+      
+      // Refresh the machines list
+      await fetchAllMachines();
+    } catch (error) {
+      console.error("Error registering machine:", error);
+      toast?.error?.(`Failed to register machine: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Fallback to local node addition if blockchain registration fails
+      const newNode: Node = {
+        nodeID: `NODE-${String(nodes.length + 1).padStart(3, '0')}`,
+        nodeName: nodeName,
+        status: 'active',
+        uptime: 0,
+        usage: 0,
+        reward: 0,
+        activationDate: new Date().toISOString().split('T')[0],
+        totalDataTransmitted: "0MB"
+      };
+      setNodes([...nodes, newNode]);
+    } finally {
+      setIsRegistering(false);
+      setMachineId("");
+    }
   };
 
   return (
@@ -39,11 +226,12 @@ export default function NodePage() {
           <button 
             onClick={() => setIsFormOpen(true)}
             className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2 rounded-lg transition-all duration-200 flex items-center gap-2 shadow-md"
+            disabled={isRegistering}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
             </svg>
-            Add Node
+            {isRegistering ? 'Adding...' : 'Add Node'}
           </button>
         </div>
         
@@ -60,7 +248,11 @@ export default function NodePage() {
           
           {/* Table body */}
           <div className="divide-y divide-white/5">
-            {nodes.map((node) => (
+            {isLoadingMachines ? (
+              <div className="px-6 py-12 text-center">
+                <p className="text-white/50">Loading nodes...</p>
+              </div>
+            ) : nodes.map((node) => (
               <Link 
                 href={`/node-page/${node.nodeID}`}
                 key={node.nodeID}
@@ -102,7 +294,7 @@ export default function NodePage() {
               </Link>
             ))}
             
-            {nodes.length === 0 && (
+            {nodes.length === 0 && !isLoadingMachines && (
               <div className="px-6 py-12 text-center">
                 <p className="text-white/50">No nodes available. Add your first node to get started.</p>
               </div>
