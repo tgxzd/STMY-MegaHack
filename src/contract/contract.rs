@@ -2,14 +2,14 @@ use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::anchor::{commit, delegate, ephemeral};
 use ephemeral_rollups_sdk::cpi::DelegateConfig;
 use ephemeral_rollups_sdk::ephem::{commit_accounts, commit_and_undelegate_accounts};
-declare_id!("3cSyEVxE9yXDYiWa6cDo5cZZr8hFE567ZBBCTZHTdsHn");
+declare_id!("5VRxLsJqbr4s2zUtkrsVejNjH5Et9fLwkMRQDY1BoxXD");
 
 pub const AGROX_PDA_SEED: &[u8] = b"agrox";
 
 #[ephemeral]
 #[program]
 pub mod agrox_contract {
-    use super::*;   
+    use super::*;
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let system_state = &mut ctx.accounts.system_state;
@@ -20,6 +20,7 @@ pub mod agrox_contract {
         system_state.plant_count = 0;
         system_state.machines = Vec::new();
         system_state.plants = Vec::new();
+        system_state.bump = ctx.bumps.system_state;
 
         msg!("AgroX system initialized by: {}", system_state.authority);
         Ok(())
@@ -63,6 +64,9 @@ pub mod agrox_contract {
         machine.last_image_timestamp = 0;
         machine.data_used_count = 0;
         
+        // Store the PDA bump
+        machine.bump = ctx.bumps.machine;
+        
         // Derive and save the auth bump for automatic uploads
         let (_, auth_bump) = find_machine_auth_pda(ctx.program_id, &machine_id);
         machine.auth_bump = auth_bump;
@@ -87,6 +91,7 @@ pub mod agrox_contract {
         plant.image_count = 0;
         plant.creation_timestamp = Clock::get()?.unix_timestamp;
         plant.last_update_timestamp = 0;
+        plant.bump = ctx.bumps.plant;
 
         // Add plant to system state
         let system_state = &mut ctx.accounts.system_state;
@@ -132,21 +137,27 @@ pub mod agrox_contract {
         let machine = &mut ctx.accounts.machine;
         let system_state = &mut ctx.accounts.system_state;
         let plant = &mut ctx.accounts.plant;
+        let data = &mut ctx.accounts.data;
         let clock = Clock::get()?;
         
-        // Machine active status is already checked in the account constraints
+        // Initialize data account properties if it's a new account
+        if data.data_entries.is_empty() && data.machine.eq(&Pubkey::default()) {
+            data.machine = machine.key();
+            data.plant = plant.key();
+            data.data_entries = Vec::new();
+        }
         
-        // The PDA validation is automatically handled by the account constraints
+        // Create new data entry
+        let new_entry = DataEntry {
+            timestamp: clock.unix_timestamp,
+            temperature,
+            humidity,
+            image_url: image_url.clone(),
+            used_count: 0,
+        };
         
-        // Create and initialize the data account
-        let data = &mut ctx.accounts.data;
-        data.machine = machine.key();
-        data.plant = plant.key();
-        data.timestamp = clock.unix_timestamp;
-        data.temperature = temperature;
-        data.humidity = humidity;
-        data.image_url = image_url.clone();
-        data.used_count = 0;
+        // Add the entry to the data vector
+        data.data_entries.push(new_entry);
         
         // Update machine, plant and system state
         machine.data_count += 1;
@@ -172,14 +183,18 @@ pub mod agrox_contract {
         Ok(())
     }
 
-    pub fn use_data(ctx: Context<UseData>) -> Result<()> {
+    pub fn use_data(ctx: Context<UseData>, entry_index: u64) -> Result<()> {
         let data = &mut ctx.accounts.data;
         let machine = &mut ctx.accounts.machine;
         let user = &ctx.accounts.user;
         let system_state = &mut ctx.accounts.system_state;
+        let entry_index = entry_index as usize;
         
-        // Update usage count
-        data.used_count += 1;
+        // Ensure the entry index is valid
+        require!(entry_index < data.data_entries.len(), ErrorCode::InvalidDataEntryIndex);
+        
+        // Update usage count for the specific entry
+        data.data_entries[entry_index].used_count += 1;
         machine.data_used_count += 1;
         system_state.data_request_count += 1;
         
@@ -187,7 +202,7 @@ pub mod agrox_contract {
         let reward_amount = 2; // 2 tokens per data usage
         machine.rewards_earned += reward_amount;
         
-        msg!("Data used by: {}", user.key());
+        msg!("Data entry {} used by: {}", entry_index, user.key());
         Ok(())
     }
 
@@ -221,6 +236,25 @@ pub mod agrox_contract {
     }
 }
 
+// Helper function to find the machine PDA
+pub fn find_machine_pda(program_id: &Pubkey, machine_id: &str) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[
+            AGROX_PDA_SEED,
+            machine_id.as_bytes(),
+        ],
+        program_id,
+    )
+}
+
+// Helper function to find the system state PDA
+pub fn find_system_state_pda(program_id: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[AGROX_PDA_SEED],
+        program_id,
+    )
+}
+
 // Helper function to find the machine authority PDA
 pub fn find_machine_auth_pda(program_id: &Pubkey, machine_id: &str) -> (Pubkey, u8) {
     Pubkey::find_program_address(
@@ -232,12 +266,25 @@ pub fn find_machine_auth_pda(program_id: &Pubkey, machine_id: &str) -> (Pubkey, 
     )
 }
 
+// Helper function to find the plant PDA
+pub fn find_plant_pda(program_id: &Pubkey, plant_name: &str) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[
+            AGROX_PDA_SEED,
+            plant_name.as_bytes(),
+        ],
+        program_id,
+    )
+}
+
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(
         init,
         payer = authority,
-        space = SystemState::SPACE
+        space = SystemState::SPACE,
+        seeds = [AGROX_PDA_SEED],
+        bump
     )]
     pub system_state: Account<'info, SystemState>,
     
@@ -248,6 +295,7 @@ pub struct Initialize<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(machine_id: String)]
 pub struct RegisterMachine<'info> {
     #[account(mut)]
     pub system_state: Account<'info, SystemState>,
@@ -255,7 +303,9 @@ pub struct RegisterMachine<'info> {
     #[account(
         init,
         payer = user,
-        space = Machine::SPACE
+        space = Machine::SPACE,
+        seeds = [AGROX_PDA_SEED, machine_id.as_bytes()],
+        bump
     )]
     pub machine: Account<'info, Machine>,
     
@@ -266,6 +316,7 @@ pub struct RegisterMachine<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(plant_name: String)]
 pub struct CreatePlant<'info> {
     #[account(mut)]
     pub system_state: Account<'info, SystemState>,
@@ -273,7 +324,9 @@ pub struct CreatePlant<'info> {
     #[account(
         init,
         payer = user,
-        space = PlantData::SPACE
+        space = PlantData::SPACE,
+        seeds = [AGROX_PDA_SEED, plant_name.as_bytes()],
+        bump
     )]
     pub plant: Account<'info, PlantData>,
     
@@ -309,9 +362,15 @@ pub struct UploadData<'info> {
     pub plant: Account<'info, PlantData>,
     
     #[account(
-        init,
+        init_if_needed,
         payer = payer,
-        space = IoTData::SPACE
+        space = IoTData::space(100), // Allow for 100 data entries per machine-plant pair
+        seeds = [
+            AGROX_PDA_SEED,
+            machine.key().as_ref(),
+            plant.key().as_ref(),
+        ],
+        bump
     )]
     pub data: Account<'info, IoTData>,
     
@@ -385,6 +444,7 @@ pub struct SystemState {
     pub plant_count: u64,
     pub machines: Vec<(String, Pubkey)>,
     pub plants: Vec<(String, Pubkey)>,
+    pub bump: u8,
 }
 
 impl SystemState {
@@ -395,7 +455,8 @@ impl SystemState {
                             8 + // data_request_count
                             8 + // plant_count
                             500 + // machines vec (approx space)
-                            500; // plants vec (approx space)
+                            500 + // plants vec (approx space)
+                            1; // bump
 }
 
 #[account]
@@ -410,6 +471,7 @@ pub struct Machine {
     pub last_image_timestamp: i64,
     pub data_used_count: u64,
     pub auth_bump: u8,
+    pub bump: u8,
 }
 
 impl Machine {
@@ -423,7 +485,8 @@ impl Machine {
                             8 + // last_data_timestamp
                             8 + // last_image_timestamp
                             8 + // data_used_count
-                            1; // auth_bump
+                            1 + // auth_bump
+                            1; // bump
 }
 
 #[account]
@@ -434,6 +497,7 @@ pub struct PlantData {
     pub image_count: u64,
     pub creation_timestamp: i64,
     pub last_update_timestamp: i64,
+    pub bump: u8,
 }
 
 impl PlantData {
@@ -443,13 +507,20 @@ impl PlantData {
                             8 + // data_count
                             8 + // image_count
                             8 + // creation_timestamp
-                            8; // last_update_timestamp
+                            8 + // last_update_timestamp
+                            1; // bump
 }
 
 #[account]
 pub struct IoTData {
     pub machine: Pubkey,
     pub plant: Pubkey,
+    pub data_entries: Vec<DataEntry>,
+    pub bump: u8,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+pub struct DataEntry {
     pub timestamp: i64,
     pub temperature: f64,
     pub humidity: f64,
@@ -458,14 +529,21 @@ pub struct IoTData {
 }
 
 impl IoTData {
-    pub const SPACE: usize = 8 + // discriminator
-                            32 + // machine
-                            32 + // plant
-                            8 + // timestamp
-                            8 + // temperature
-                            8 + // humidity
-                            (1 + 100) + // Option<String> (1 for is_some flag + max 100 bytes for URL)
-                            8; // used_count
+    pub const BASE_SPACE: usize = 8 + // discriminator
+                             32 + // machine
+                             32 + // plant
+                             4 + // vec length (u32)
+                             1; // bump
+                             
+    pub const ENTRY_SPACE: usize = 8 + // timestamp
+                               8 + // temperature
+                               8 + // humidity
+                               (1 + 100) + // Option<String>
+                               8; // used_count
+                               
+    pub fn space(max_entries: usize) -> usize {
+        Self::BASE_SPACE + (Self::ENTRY_SPACE * max_entries)
+    }
 }
 
 #[error_code]
@@ -480,6 +558,8 @@ pub enum ErrorCode {
     NoRewardsAvailable,
     #[msg("Unregistered plant")]
     UnregisteredPlant,
+    #[msg("Invalid data entry index")]
+    InvalidDataEntryIndex,
 }
 
 #[delegate]
