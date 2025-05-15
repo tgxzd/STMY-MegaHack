@@ -183,7 +183,7 @@ export default function NodeDetailPage() {
               </div>
               
               <div className="flex justify-between">
-                <span className="text-white/70">Today's Rewards:</span>
+                <span className="text-white/70">Today&apos;s Rewards:</span>
                 <span className="text-white">{node.reward} Pts</span>
               </div>
             </div>

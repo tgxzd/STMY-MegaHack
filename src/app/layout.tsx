@@ -4,6 +4,7 @@ import { Inter } from 'next/font/google';
 import Navbar from '@/components/navbar';
 import "./globals.css";
 import { WalletProvider } from "@/components/wallet-provider";
+import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -41,7 +42,8 @@ export default function RootLayout({
       >
         <WalletProvider>
           <Navbar />
-        {children}
+          {children}
+          <Toaster />
         </WalletProvider>
       </body>
     </html>
