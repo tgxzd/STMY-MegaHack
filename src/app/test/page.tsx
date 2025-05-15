@@ -9,9 +9,27 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const PROGRAM_ID = new PublicKey("CWDF2qKJp68SfMV9iqo8Ao1SiEWV1a3CXLLQbmaMPouo");
 const AGROX_PDA_SEED = "";
+
+// Define the type for machine accounts based on the IDL
+type MachineAccount = {
+  owner: PublicKey;
+  machineId: string;
+  isActive: boolean;
+  dataCount: number;
+  imageCount: number;
+  rewardsEarned: number;
+  lastDataTimestamp: number;
+  lastImageTimestamp: number;
+  dataUsedCount: number;
+  authBump: number;
+  bump: number;
+  publicKey: PublicKey;
+};
 
 const TestPage = () => {
   const { connection } = useConnection();
@@ -20,6 +38,9 @@ const TestPage = () => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [machineId, setMachineId] = useState("AgroX-0");
+  const [registeredMachines, setRegisteredMachines] = useState<MachineAccount[]>([]);
+  const [isLoadingMachines, setIsLoadingMachines] = useState(false);
+  const [isProcessing, setIsProcessing] = useState<Record<string, boolean>>({});
 
   const getProgram = () => {
     if (!wallet) return null;
@@ -38,6 +59,9 @@ const TestPage = () => {
     checkIfInitialized();
     getMachineData();
     find_cluster_pda();
+    if (wallet) {
+      fetchAllMachines();
+    }
   }, [wallet, connection]);
 
   const checkIfInitialized = async () => {
@@ -231,6 +255,131 @@ const TestPage = () => {
     }
   };
 
+  // Function to fetch all machine accounts
+  const fetchAllMachines = async () => {
+    try {
+      setIsLoadingMachines(true);
+      const program = getProgram();
+      if (!program || !wallet) {
+        toast.error("Wallet not connected");
+        return;
+      }
+
+      // @ts-expect-error - Bypass TypeScript checks since account structure comes from IDL
+      const allMachines = await program.account.machine.all();
+      console.log("All machines:", allMachines);
+      
+      // Define the expected structure for the account
+      type MachineAccountRaw = {
+        owner: PublicKey;
+        machineId: string;
+        isActive: boolean;
+        dataCount: { toNumber: () => number };
+        imageCount: { toNumber: () => number };
+        rewardsEarned: { toNumber: () => number };
+        lastDataTimestamp: { toNumber: () => number };
+        lastImageTimestamp: { toNumber: () => number };
+        dataUsedCount: { toNumber: () => number };
+        authBump: number;
+        bump: number;
+      };
+      
+      // Transform data to match our expected format
+      const machineAccounts = allMachines.map((item: { account: MachineAccountRaw; publicKey: PublicKey }) => {
+        const account = item.account;
+        return {
+          owner: account.owner,
+          machineId: account.machineId,
+          isActive: account.isActive,
+          dataCount: account.dataCount.toNumber(),
+          imageCount: account.imageCount.toNumber(),
+          rewardsEarned: account.rewardsEarned.toNumber(),
+          lastDataTimestamp: account.lastDataTimestamp.toNumber(),
+          lastImageTimestamp: account.lastImageTimestamp.toNumber(),
+          dataUsedCount: account.dataUsedCount.toNumber(),
+          authBump: account.authBump,
+          bump: account.bump,
+          publicKey: item.publicKey,
+        };
+      });
+      
+      setRegisteredMachines(machineAccounts);
+    } catch (error) {
+      console.error("Error fetching machines:", error);
+      toast.error(`Failed to fetch machines: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsLoadingMachines(false);
+    }
+  };
+
+  const startMachine = async (machineId: string, publicKey: PublicKey) => {
+    try {
+      // Update processing state
+      setIsProcessing(prev => ({ ...prev, [machineId]: true }));
+      
+      const program = getProgram();
+      if (!program || !wallet) {
+        toast.error("Wallet not connected");
+        return;
+      }
+
+      // Call the start_machine instruction
+      const tx = await program.methods
+        .startMachine()
+        .accounts({
+          machine: publicKey,
+          user: wallet.publicKey,
+        })
+        .rpc();
+      
+      toast.success(`Machine ${machineId} started successfully`);
+      console.log("Transaction signature:", tx);
+      
+      // Refresh the machine list
+      fetchAllMachines();
+    } catch (error) {
+      console.error(`Error starting machine ${machineId}:`, error);
+      toast.error(`Failed to start machine: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      // Clear processing state
+      setIsProcessing(prev => ({ ...prev, [machineId]: false }));
+    }
+  };
+
+  const stopMachine = async (machineId: string, publicKey: PublicKey) => {
+    try {
+      // Update processing state
+      setIsProcessing(prev => ({ ...prev, [machineId]: true }));
+      
+      const program = getProgram();
+      if (!program || !wallet) {
+        toast.error("Wallet not connected");
+        return;
+      }
+
+      // Call the stop_machine instruction
+      const tx = await program.methods
+        .stopMachine()
+        .accounts({
+          machine: publicKey,
+          user: wallet.publicKey,
+        })
+        .rpc();
+      
+      toast.success(`Machine ${machineId} stopped successfully`);
+      console.log("Transaction signature:", tx);
+      
+      // Refresh the machine list
+      fetchAllMachines();
+    } catch (error) {
+      console.error(`Error stopping machine ${machineId}:`, error);
+      toast.error(`Failed to stop machine: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      // Clear processing state
+      setIsProcessing(prev => ({ ...prev, [machineId]: false }));
+    }
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <Card className="w-full">
@@ -272,6 +421,86 @@ const TestPage = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Add the machines list card */}
+      <Card className="w-full">
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>Registered Machines</CardTitle>
+              <CardDescription>All machines registered to the AgroX system</CardDescription>
+            </div>
+            <Button 
+              onClick={fetchAllMachines} 
+              disabled={isLoadingMachines || !wallet}
+            >
+              {isLoadingMachines ? "Loading..." : "Refresh"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {registeredMachines.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Machine ID</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Data Count</TableHead>
+                  <TableHead>Image Count</TableHead>
+                  <TableHead>Rewards</TableHead>
+                  <TableHead>Last Update</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {registeredMachines.map((machine, index) => (
+                  <TableRow key={index}>
+                    <TableCell className="font-medium">{machine.machineId}</TableCell>
+                    <TableCell>
+                      <Badge variant={machine.isActive ? "default" : "destructive"}>
+                        {machine.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{machine.dataCount}</TableCell>
+                    <TableCell>{machine.imageCount}</TableCell>
+                    <TableCell>{machine.rewardsEarned}</TableCell>
+                    <TableCell>
+                      {machine.lastDataTimestamp > 0 
+                        ? new Date(machine.lastDataTimestamp * 1000).toLocaleString() 
+                        : "Never"}
+                    </TableCell>
+                    <TableCell>
+                      {machine.isActive ? (
+                        <Button 
+                          variant="destructive" 
+                          size="sm"
+                          onClick={() => stopMachine(machine.machineId, machine.publicKey)}
+                          disabled={isProcessing[machine.machineId]}
+                        >
+                          {isProcessing[machine.machineId] ? "Processing..." : "Stop"}
+                        </Button>
+                      ) : (
+                        <Button 
+                          variant="default" 
+                          size="sm"
+                          onClick={() => startMachine(machine.machineId, machine.publicKey)}
+                          disabled={isProcessing[machine.machineId]}
+                        >
+                          {isProcessing[machine.machineId] ? "Processing..." : "Start"}
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="text-center py-4">
+              {isLoadingMachines ? "Loading machines..." : "No machines registered yet"}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };
