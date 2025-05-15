@@ -10,8 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 
-const PROGRAM_ID = new PublicKey("5VRxLsJqbr4s2zUtkrsVejNjH5Et9fLwkMRQDY1BoxXD");
-const AGROX_PDA_SEED = "agrox";
+const PROGRAM_ID = new PublicKey("CWDF2qKJp68SfMV9iqo8Ao1SiEWV1a3CXLLQbmaMPouo");
+const AGROX_PDA_SEED = "";
 
 const TestPage = () => {
   const { connection } = useConnection();
@@ -19,7 +19,7 @@ const TestPage = () => {
   const [isInitializing, setIsInitializing] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
-  const [machineId, setMachineId] = useState("");
+  const [machineId, setMachineId] = useState("AgroX-0");
 
   const getProgram = () => {
     if (!wallet) return null;
@@ -36,6 +36,8 @@ const TestPage = () => {
 
   useEffect(() => {
     checkIfInitialized();
+    getMachineData();
+    find_cluster_pda();
   }, [wallet, connection]);
 
   const checkIfInitialized = async () => {
@@ -45,15 +47,15 @@ const TestPage = () => {
       const program = getProgram();
       if (!program) return;
 
-      const [systemStatePda] = PublicKey.findProgramAddressSync(
-        [Buffer.from(AGROX_PDA_SEED)],
+      const [clusterPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("cluster")],
         PROGRAM_ID
       );
 
       // Try to fetch the system state account
       try {
-        const systemState = await connection.getAccountInfo(systemStatePda);
-        setIsInitialized(!!systemState);
+        const cluster = await connection.getAccountInfo(clusterPda);
+        setIsInitialized(!!cluster);
       } catch {
         setIsInitialized(false);
       }
@@ -119,21 +121,24 @@ const TestPage = () => {
       }
 
       // Find the PDAs
-      const [systemStatePda] = PublicKey.findProgramAddressSync(
-        [Buffer.from(AGROX_PDA_SEED)],
+      const [clusterPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("cluster")],
         PROGRAM_ID
       );
 
+      // According to IDL, machine PDA uses "agrox" prefix, not "machine"
       const [machinePda] = PublicKey.findProgramAddressSync(
-        [Buffer.from(AGROX_PDA_SEED), Buffer.from(machineId)],
+        [Buffer.from("agrox"), Buffer.from(machineId)],
         PROGRAM_ID
       );
+
+      console.log("Machine PDA being used:", machinePda.toBase58());
 
       // Call the register_machine instruction
       const tx = await program.methods
         .registerMachine(machineId)
         .accounts({
-          systemState: systemStatePda,
+          cluster: clusterPda,
           machine: machinePda,
           user: wallet.publicKey,
           systemProgram: SystemProgram.programId,
@@ -148,6 +153,81 @@ const TestPage = () => {
       toast.error(`Failed to register machine: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsRegistering(false);
+    }
+  };
+
+  const getMachineData = async () => {
+    try {
+      const program = getProgram();
+      if (!program || !wallet) {
+        toast.error("Wallet not connected");
+        return;
+      }
+      
+      const[machinePda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("agrox"), Buffer.from(machineId)],
+        PROGRAM_ID
+      );
+
+      console.log("Machine PDA:", machinePda.toBase58());
+      
+      // Try to fetch machine account data
+      try {
+        // @ts-expect-error - Bypass TypeScript checks since account structure comes from IDL
+        const machineAccount = await program.account.machine.fetch(machinePda);
+        console.log("Machine data:", machineAccount);
+      } catch (error) {
+        console.log("Machine account may not exist yet:", error);
+      }
+      
+    } catch (error) {
+      console.error("Error fetching machine data:", error);
+      toast.error(`Failed to fetch machine data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const find_cluster_pda = async () => {
+    try {
+      const program = getProgram();
+      if (!program || !wallet) {
+        toast.error("Wallet not connected");
+        return;
+      }
+
+      const[clusterPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("cluster")],
+        PROGRAM_ID
+      );
+
+      // Get raw account data first
+      const accountInfo = await connection.getAccountInfo(clusterPda);
+      
+      if (accountInfo) {
+        try {
+          // @ts-expect-error - Bypass TypeScript checks since account structure comes from IDL
+          const clusterAccount = await program.account.cluster.fetch(clusterPda);
+          console.log("Cluster account (Deserialized):", clusterAccount);
+        } catch {
+          console.log("Failed to deserialize using Anchor, raw data:", accountInfo.data);
+          
+          // For debugging: try to manually decode account data
+          if (accountInfo?.data) {
+            // Log the raw buffer for analysis
+            console.log("Raw Buffer:", Buffer.from(accountInfo.data));
+            
+            // Log first 8 bytes (discriminator)
+            console.log("Discriminator:", Buffer.from(accountInfo.data.slice(0, 8)));
+          }
+        }
+      } else {
+        console.log("Cluster account doesn't exist");
+      }
+      
+      console.log("Cluster PDA:", clusterPda.toBase58());
+      
+    } catch (error) {
+      console.error("Error finding cluster state:", error);
+      toast.error(`Failed to find cluster state: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 

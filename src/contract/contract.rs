@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::anchor::{commit, delegate, ephemeral};
 use ephemeral_rollups_sdk::cpi::DelegateConfig;
 use ephemeral_rollups_sdk::ephem::{commit_accounts, commit_and_undelegate_accounts};
-declare_id!("5VRxLsJqbr4s2zUtkrsVejNjH5Et9fLwkMRQDY1BoxXD");
+declare_id!("CWDF2qKJp68SfMV9iqo8Ao1SiEWV1a3CXLLQbmaMPouo");
 
 pub const AGROX_PDA_SEED: &[u8] = b"agrox";
 

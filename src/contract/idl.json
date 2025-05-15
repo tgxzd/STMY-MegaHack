@@ -1,5 +1,5 @@
 {
-  "address": "5VRxLsJqbr4s2zUtkrsVejNjH5Et9fLwkMRQDY1BoxXD",
+  "address": "CWDF2qKJp68SfMV9iqo8Ao1SiEWV1a3CXLLQbmaMPouo",
   "metadata": {
     "name": "agrox_contract",
     "version": "0.1.0",
@@ -45,7 +45,7 @@
       ],
       "accounts": [
         {
-          "name": "system_state",
+          "name": "cluster",
           "writable": true
         },
         {
@@ -131,38 +131,38 @@
             "program": {
               "kind": "const",
               "value": [
-                66,
-                183,
-                57,
-                228,
-                125,
-                224,
-                234,
-                229,
-                230,
-                172,
-                5,
+                170,
+                236,
+                61,
+                220,
+                45,
+                64,
+                91,
+                77,
+                38,
+                193,
+                83,
+                26,
+                11,
+                162,
+                238,
+                14,
+                180,
                 215,
                 7,
-                251,
-                167,
-                123,
-                18,
-                158,
-                194,
-                70,
-                131,
-                48,
-                115,
-                75,
-                234,
-                86,
-                228,
-                136,
-                74,
-                188,
-                94,
-                36
+                200,
+                55,
+                105,
+                156,
+                184,
+                64,
+                89,
+                39,
+                109,
+                150,
+                91,
+                31,
+                190
               ]
             }
           }
@@ -247,7 +247,7 @@
         },
         {
           "name": "owner_program",
-          "address": "5VRxLsJqbr4s2zUtkrsVejNjH5Et9fLwkMRQDY1BoxXD"
+          "address": "CWDF2qKJp68SfMV9iqo8Ao1SiEWV1a3CXLLQbmaMPouo"
         },
         {
           "name": "delegation_program",
@@ -336,18 +336,20 @@
       ],
       "accounts": [
         {
-          "name": "system_state",
+          "name": "cluster",
           "writable": true,
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  97,
-                  103,
-                  114,
-                  111,
-                  120
+                  99,
+                  108,
+                  117,
+                  115,
+                  116,
+                  101,
+                  114
                 ]
               }
             ]
@@ -416,7 +418,7 @@
       ],
       "accounts": [
         {
-          "name": "system_state",
+          "name": "cluster",
           "writable": true
         },
         {
@@ -557,7 +559,7 @@
       ],
       "accounts": [
         {
-          "name": "system_state",
+          "name": "cluster",
           "writable": true
         },
         {
@@ -664,7 +666,7 @@
       ],
       "accounts": [
         {
-          "name": "system_state",
+          "name": "cluster",
           "writable": true
         },
         {
