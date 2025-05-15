@@ -209,30 +209,7 @@ export default function DatasetPage() {
           </div>
         </div>
         
-        <div className="bg-black/80 backdrop-blur-md rounded-xl border border-white/10 overflow-hidden shadow-xl p-6 mb-8">
-          <h2 className="text-xl font-medium text-white mb-6">System Status</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-black/40 rounded-lg border border-emerald-500/30 p-4">
-              <h3 className="text-white font-medium mb-3">Storage Usage</h3>
-              <div className="h-3 bg-black/50 rounded-full overflow-hidden mb-2">
-                <div className="h-full bg-emerald-500 rounded-full" style={{ width: '34%' }}></div>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-white/50">3.4 GB used</span>
-                <span className="text-white/50">10 GB total</span>
-              </div>
-            </div>
-            
-            <div className="bg-black/40 rounded-lg border border-emerald-500/30 p-4">
-              <h3 className="text-white font-medium mb-3">System Uptime</h3>
-              <div className="flex justify-between items-center">
-                <div className="text-emerald-400 text-2xl font-bold">99.8%</div>
-                <div className="text-white/50 text-sm">Last 30 days</div>
-              </div>
-            </div>
-          </div>
-        </div>
+      
       </div>
     </main>
   );
