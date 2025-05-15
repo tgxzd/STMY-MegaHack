@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+// import { useState, useEffect } from 'react';
 import { sensorData } from '@/data/sensor';
 import { SensorGraph } from '@/components/ui/SensorGraph';
 import Image from 'next/image';

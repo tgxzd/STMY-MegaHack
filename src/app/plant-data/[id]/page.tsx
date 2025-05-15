@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
+// import Link from 'next/link';
 import { sensorData, timeData } from '@/data/sensor';
 import Image from 'next/image';
 
