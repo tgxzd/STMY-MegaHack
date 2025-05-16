@@ -2,9 +2,8 @@ use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::anchor::{commit, delegate, ephemeral};
 use ephemeral_rollups_sdk::cpi::DelegateConfig;
 use ephemeral_rollups_sdk::ephem::{commit_accounts, commit_and_undelegate_accounts};
-declare_id!("5AcbpD3VGWLsLVrVpXZsDUvitNdbCCGL82B27MYsPsuG");
+declare_id!("4oweKJAgekQk5WoixX6Uagk8SNTbpPZb6QhmYd9Vv6nW");
 
-pub const AGROX_PDA_SEED: &[u8] = b"agrox";
 
 #[ephemeral]
 #[program]
@@ -30,7 +29,7 @@ pub mod agrox_contract {
     pub fn delegate(ctx: Context<DelegateInput>) -> Result<()> {
         ctx.accounts.delegate_pda(
             &ctx.accounts.payer,
-            &[AGROX_PDA_SEED],
+            &[b"cluster"],
             DelegateConfig::default(),
         )?;
         Ok(())
@@ -63,13 +62,9 @@ pub mod agrox_contract {
         machine.last_data_timestamp = 0;
         machine.last_image_timestamp = 0;
         machine.data_used_count = 0;
-        
-        // Store the PDA bump
+        machine.plants = Vec::new();
+        machine.plant_count = 0;
         machine.bump = ctx.bumps.machine;
-        
-        // Derive and save the auth bump for automatic uploads
-        let (_, auth_bump) = find_machine_auth_pda(ctx.program_id, &machine_id);
-        machine.auth_bump = auth_bump;
 
         // Add machine to cluster
         let cluster = &mut ctx.accounts.cluster;
@@ -81,8 +76,6 @@ pub mod agrox_contract {
     }
 
     pub fn create_plant(ctx: Context<CreatePlant>, plant_name: String) -> Result<()> {
-        // No longer validating if plant name already exists
-
         // Create and initialize the plant account
         let plant = &mut ctx.accounts.plant;
         plant.creator = ctx.accounts.user.key();
@@ -91,6 +84,7 @@ pub mod agrox_contract {
         plant.image_count = 0;
         plant.creation_timestamp = Clock::get()?.unix_timestamp;
         plant.last_update_timestamp = 0;
+        plant.machine = ctx.accounts.machine.key();
         plant.bump = ctx.bumps.plant;
 
         // Add plant to cluster
@@ -98,7 +92,12 @@ pub mod agrox_contract {
         cluster.plants.push((plant_name.clone(), ctx.accounts.plant.key()));
         cluster.plant_count += 1;
 
-        msg!("Plant created: {}", plant_name);
+        // Add plant to the machine
+        let machine = &mut ctx.accounts.machine;
+        machine.plants.push((plant_name.clone(), ctx.accounts.plant.key()));
+        machine.plant_count += 1;
+
+        msg!("Plant created: {} for machine: {}", plant_name, machine.machine_id);
         Ok(())
     }
 
@@ -139,6 +138,12 @@ pub mod agrox_contract {
         let plant = &mut ctx.accounts.plant;
         let data = &mut ctx.accounts.data;
         let clock = Clock::get()?;
+        
+        // Verify the plant belongs to the machine
+        require!(
+            plant.machine == machine.key(),
+            ErrorCode::PlantNotLinkedToMachine
+        );
         
         // Initialize data account properties if it's a new account
         if data.data_entries.is_empty() && data.machine.eq(&Pubkey::default()) {
@@ -225,57 +230,8 @@ pub mod agrox_contract {
         
         Ok(())
     }
-
-    pub fn generate_machine_auth(
-        ctx: Context<GenerateMachineAuth>,
-        machine_id: String,
-    ) -> Result<()> {
-        // This function simply validates the PDA, which will create the account if it doesn't exist
-        msg!("Generated machine auth for machine ID: {}", machine_id);
-        Ok(())
-    }
 }
 
-// Helper function to find the machine PDA
-pub fn find_machine_pda(program_id: &Pubkey, machine_id: &str) -> (Pubkey, u8) {
-    Pubkey::find_program_address(
-        &[
-            AGROX_PDA_SEED,
-            machine_id.as_bytes(),
-        ],
-        program_id,
-    )
-}
-
-// Helper function to find the cluster PDA
-pub fn find_cluster_pda(program_id: &Pubkey) -> (Pubkey, u8) {
-    Pubkey::find_program_address(
-        &[b"cluster"], 
-        program_id,
-    )
-}
-
-// Helper function to find the machine authority PDA
-pub fn find_machine_auth_pda(program_id: &Pubkey, machine_id: &str) -> (Pubkey, u8) {
-    Pubkey::find_program_address(
-        &[
-            b"machine-auth",
-            machine_id.as_bytes(),
-        ],
-        program_id,
-    )
-}
-
-// Helper function to find the plant PDA
-pub fn find_plant_pda(program_id: &Pubkey, plant_name: &str) -> (Pubkey, u8) {
-    Pubkey::find_program_address(
-        &[
-            AGROX_PDA_SEED,
-            plant_name.as_bytes(),
-        ],
-        program_id,
-    )
-}
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
@@ -309,7 +265,7 @@ pub struct RegisterMachine<'info> {
         init,
         payer = user,
         space = Machine::SPACE,
-        seeds = [AGROX_PDA_SEED, machine_id.as_bytes()],
+        seeds = [b"machine", machine_id.as_bytes()],
         bump
     )]
     pub machine: Account<'info, Machine>,
@@ -330,10 +286,16 @@ pub struct CreatePlant<'info> {
         init,
         payer = user,
         space = PlantData::SPACE,
-        seeds = [AGROX_PDA_SEED, plant_name.as_bytes()],
+        seeds = [b"plant", plant_name.as_bytes()],
         bump
     )]
     pub plant: Account<'info, PlantData>,
+    
+    #[account(
+        mut,
+        constraint = machine.owner == user.key() @ ErrorCode::Unauthorized
+    )]
+    pub machine: Account<'info, Machine>,
     
     #[account(mut)]
     pub user: Signer<'info>,
@@ -362,27 +324,18 @@ pub struct UploadData<'info> {
 
     #[account(
         mut,
-        constraint = cluster.plants.iter().any(|(_, pubkey)| *pubkey == plant.key()) @ ErrorCode::UnregisteredPlant,
+        constraint = plant.machine == machine.key() @ ErrorCode::PlantNotLinkedToMachine,
     )]
     pub plant: Account<'info, PlantData>,
     
     #[account(
-        mut,
-        realloc = IoTData::BASE_SPACE + (IoTData::ENTRY_SPACE * (data.data_entries.len() + 1)),
-        realloc::payer = payer,
-        realloc::zero = false,
+        init_if_needed,
+        payer = payer,
+        space = IoTData::space(1),
+        seeds = [b"data", machine.machine_id.as_bytes(), plant.plant_name.as_bytes()],
+        bump
     )]
     pub data: Account<'info, IoTData>,
-    
-    #[account(
-        seeds = [
-            b"machine-auth", 
-            machine.machine_id.as_bytes()
-        ],
-        bump = machine.auth_bump,
-    )]
-    /// CHECK: This account is a PDA derived from the machine ID
-    pub auth_pda: UncheckedAccount<'info>,
     
     #[account(mut)]
     pub payer: Signer<'info>,
@@ -410,29 +363,6 @@ pub struct ClaimRewards<'info> {
     pub machine: Account<'info, Machine>,
     
     pub user: Signer<'info>,
-}
-
-#[derive(Accounts)]
-pub struct GenerateMachineAuth<'info> {
-    #[account(mut)]
-    pub machine: Account<'info, Machine>,
-    
-    #[account(
-        constraint = machine.owner == user.key() @ ErrorCode::Unauthorized,
-    )]
-    pub user: Signer<'info>,
-    
-    #[account(
-        seeds = [
-            b"machine-auth", 
-            machine.machine_id.as_bytes()
-        ],
-        bump = machine.auth_bump,
-    )]
-    /// CHECK: This account is a PDA derived from the machine ID
-    pub auth_pda: UncheckedAccount<'info>,
-    
-    pub system_program: Program<'info, System>,
 }
 
 #[account]
@@ -478,7 +408,8 @@ pub struct Machine {
     pub last_data_timestamp: i64,
     pub last_image_timestamp: i64,
     pub data_used_count: u64,
-    pub auth_bump: u8,
+    pub plants: Vec<(String, Pubkey)>,
+    pub plant_count: u64,
     pub bump: u8,
 }
 
@@ -493,7 +424,8 @@ impl Machine {
                             8 + // last_data_timestamp
                             8 + // last_image_timestamp
                             8 + // data_used_count
-                            1 + // auth_bump
+                            4 + // plants vec length
+                            8 + // plant_count
                             1; // bump
 }
 
@@ -505,6 +437,7 @@ pub struct PlantData {
     pub image_count: u64,
     pub creation_timestamp: i64,
     pub last_update_timestamp: i64,
+    pub machine: Pubkey,
     pub bump: u8,
 }
 
@@ -516,6 +449,7 @@ impl PlantData {
                             8 + // image_count
                             8 + // creation_timestamp
                             8 + // last_update_timestamp
+                            32 + // machine
                             1; // bump
 }
 
@@ -568,6 +502,8 @@ pub enum ErrorCode {
     UnregisteredPlant,
     #[msg("Invalid data entry index")]
     InvalidDataEntryIndex,
+    #[msg("Plant not linked to the specified machine")]
+    PlantNotLinkedToMachine,
 }
 
 #[delegate]

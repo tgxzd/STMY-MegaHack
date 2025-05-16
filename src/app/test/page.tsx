@@ -1,1128 +1,773 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import * as anchor from '@coral-xyz/anchor';
 import { Program } from '@coral-xyz/anchor';
 import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react';
-import { PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
+import { PublicKey, SystemProgram } from '@solana/web3.js';
 import idl from '@/contract/idl.json';
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { toast } from "sonner";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import * as borsh from "@coral-xyz/borsh";
-
-const PROGRAM_ID = new PublicKey("5AcbpD3VGWLsLVrVpXZsDUvitNdbCCGL82B27MYsPsuG");
-
-// Define the type for machine accounts based on the IDL
-type MachineAccount = {
-  owner: PublicKey;
-  machineId: string;
-  isActive: boolean;
-  dataCount: number;
-  imageCount: number;
-  rewardsEarned: number;
-  lastDataTimestamp: number;
-  lastImageTimestamp: number;
-  dataUsedCount: number;
-  authBump: number;
-  bump: number;
-  publicKey: PublicKey;
-};
-
-// Define the type for plant accounts
-type PlantAccount = {
-  creator: PublicKey;
-  plantName: string;
-  dataCount: number;
-  imageCount: number;
-  creationTimestamp: number;
-  lastUpdateTimestamp: number;
-  bump: number;
-  publicKey: PublicKey;
-};
-
-const programIdl = idl as anchor.Idl;
-
-// Log the IDL instructions to see what's available
-console.log("IDL Instructions:", programIdl.instructions?.map(i => i.name));
-
-// Define a borsh schema for the cluster account
-// This is a best guess based on common Anchor account patterns
-const clusterSchema = borsh.struct([
-  // First 8 bytes are the account discriminator
-  borsh.array(borsh.u8(), 8, "discriminator"),
-  // Common fields that might be in a cluster account
-  borsh.publicKey("authority"),
-  borsh.u64("totalMachines"),
-  borsh.u64("totalPlants"),
-  borsh.u8("bump")
-]);
-
-// Helper function to deserialize cluster account data
-const deserializeClusterAccount = (data: Buffer) => {
-  try {
-    // Skip the account discriminator (first 8 bytes) as we already know what account type we're working with
-    const decoded = clusterSchema.decode(data);
-    return {
-      discriminator: Array.from(decoded.discriminator),
-      authority: decoded.authority,
-      totalMachines: decoded.totalMachines.toString(),
-      totalPlants: decoded.totalPlants.toString(),
-      bump: decoded.bump
-    };
-  } catch (error) {
-    console.error("Failed to deserialize cluster account with borsh:", error);
-    // Fallback: just log the raw discriminator
-    if (data && data.length >= 8) {
-      return {
-        discriminator: Array.from(data.slice(0, 8)),
-        rawData: Array.from(data)
-      };
-    }
-    return null;
-  }
-};
 
 const TestPage = () => {
   const { connection } = useConnection();
   const wallet = useAnchorWallet();
-  const [isInitializing, setIsInitializing] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [machineId, setMachineId] = useState("AgroX-0");
-  const [registeredMachines, setRegisteredMachines] = useState<MachineAccount[]>([]);
-  const [isLoadingMachines, setIsLoadingMachines] = useState(false);
-  const [isProcessing, setIsProcessing] = useState<Record<string, boolean>>({});
-  
-  // Upload data state
-  const [uploadDataOpen, setUploadDataOpen] = useState(false);
-  const [selectedMachine, setSelectedMachine] = useState<string>("");
-  const [selectedPlant, setSelectedPlant] = useState<string>("");
-  const [plantName, setPlantName] = useState<string>("");
-  const [temperature, setTemperature] = useState<string>("25.0");
-  const [humidity, setHumidity] = useState<string>("60.0");
-  const [imageUrl, setImageUrl] = useState<string>("");
-  const [isUploadingData, setIsUploadingData] = useState(false);
-  const [isCreatingPlant, setIsCreatingPlant] = useState(false);
-  const [plants, setPlants] = useState<PlantAccount[]>([]);
-  const [isLoadingPlants, setIsLoadingPlants] = useState(false);
-  const [createPlantOpen, setCreatePlantOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [activeTab, setActiveTab] = useState("initialize");
 
-  const getProgram = () => {
-    if (!wallet) return null;
-    
+  // Get provider and program
+  const getProvider = () => {
+    if (!wallet) {
+      throw new Error("Wallet not connected");
+    }
     const provider = new anchor.AnchorProvider(
       connection,
       wallet,
-      { commitment: 'processed' }
+      { commitment: "processed" }
     );
-    
-    const program = new Program(programIdl, provider); // This is correct already please don't change it
+    return provider;
+  };
+
+  const getProgram = () => {
+    const provider = getProvider();
+    const program = new Program(idl as anchor.Idl, provider);
     return program;
   };
 
-  useEffect(() => {
-    checkIfInitialized();
-    getMachineData();
-    find_cluster_pda();
-    if (wallet) {
-      fetchAllMachines();
-      fetchAllPlants();
-    }
-  }, [wallet, connection]);
-
-  useEffect(() => {
-    console.log("Current registered machines:", registeredMachines);
-  }, [registeredMachines]);
-
-  const checkIfInitialized = async () => {
+  // Initialize the contract
+  const initialize = async () => {
     try {
-      if (!wallet) return;
+      setLoading(true);
+      setMessage("Initializing...");
       
       const program = getProgram();
-      if (!program) return;
-
-      const [clusterPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("cluster")],
-        PROGRAM_ID
-      );
-
-      // Try to fetch the system state account
-      try {
-        const clusterInfo = await connection.getAccountInfo(clusterPda);
-        // console.log("Checking initialization: Cluster account exists:", !!clusterInfo);
-        
-        if (clusterInfo) {
-          // console.log("Cluster account data length:", clusterInfo.data.length);
-          try {
-            // Try to deserialize using borsh instead of Anchor
-            const clusterData = deserializeClusterAccount(clusterInfo.data);
-            // console.log("Deserialized cluster account using borsh:", clusterData);
-          } catch (err) {
-            console.error("Failed to deserialize cluster account:", err);
-          }
-        }
-        
-        setIsInitialized(!!clusterInfo);
-      } catch (err) {
-        console.error("Error checking cluster account:", err);
-        setIsInitialized(false);
-      }
-    } catch (error) {
-      console.error("Error checking initialization:", error);
-      // If there's an error fetching the account, assume it's not initialized
-      setIsInitialized(false);
-    }
-  };
-
-  const initializeContract = async () => {
-    try {
-      setIsInitializing(true);
-      const program = getProgram();
+      const provider = getProvider();
       
-      if (!program || !wallet) {
-        toast.error("Wallet not connected");
-        return;
-      }
-
-      // Find the PDA for the system state
-      const [clusterPda] = PublicKey.findProgramAddressSync(
+      // Updated PDA seed
+      const [clusterPDA] = PublicKey.findProgramAddressSync(
         [Buffer.from("cluster")],
-        PROGRAM_ID
+        program.programId
       );
-
-      // Check if the account already exists
-      const accountInfo = await connection.getAccountInfo(clusterPda);
-      if (accountInfo) {
-        console.log("System state account already exists");
-        console.log("Account data length:", accountInfo.data.length);
-        
-        // Try to deserialize with borsh
-        try {
-          const decodedData = deserializeClusterAccount(accountInfo.data);
-          console.log("Cluster account (Deserialized with borsh):", decodedData);
-          setIsInitialized(true);
-          toast.success("Contract is already initialized");
-          return;
-        } catch (err) {
-          console.error("Failed to deserialize cluster account with borsh:", err);
-          // Try with Anchor as fallback
-          try {
-            
-            // Get the raw account data
-            const accountInfo = await connection.getAccountInfo(clusterPda);
-            if (!accountInfo) {
-              console.log("Cluster account doesn't exist");
-              return;
-            }
-            
-            // Deserialize with borsh instead of using Anchor fetch
-            const clusterAccount = deserializeClusterAccount(accountInfo.data);
-            console.log("Cluster account (Deserialized with borsh):", clusterAccount);
-            setIsInitialized(true);
-            toast.success("Contract is already initialized");
-            return;
-          } catch (anchorErr) {
-            console.error("Failed to deserialize with Anchor:", anchorErr);
-            console.log("This might indicate the account structure has changed");
-          }
-        }
-      }
-
-      // Call the initialize instruction
-      console.log("Calling initialize instruction");
+      
       const tx = await program.methods
         .initialize()
         .accounts({
-          cluster: clusterPda,
-          authority: wallet.publicKey,
-          systemProgram: SystemProgram.programId,
+          cluster: clusterPDA,
+          authority: provider.wallet.publicKey,
+          systemProgram: SystemProgram.programId
         })
-        .rpc({
-          skipPreflight: true,
-          commitment: 'confirmed',
-          maxRetries: 3
-        });
+        .rpc();
       
-      toast.success("Contract initialized successfully");
-      console.log("Transaction signature:", tx);
-      
-      // Verify the account was created
-      const verifyAccountInfo = await connection.getAccountInfo(clusterPda);
-      if (verifyAccountInfo) {
-        console.log("Verified: System state account created");
-        console.log("Account data length:", verifyAccountInfo.data.length);
-        
-        // Try to deserialize the newly created account with borsh
-        try {
-          const decodedData = deserializeClusterAccount(verifyAccountInfo.data);
-          console.log("Newly created cluster account (borsh):", decodedData);
-        } catch (err) {
-          console.warn("Warning: Could not deserialize newly created account:", err);
-        }
-      }
-      
-      // Update the initialization status
-      setIsInitialized(true);
-    } catch (error) {
-      console.error("Error initializing contract:", error);
-      toast.error(`Failed to initialize: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setMessage(`Successfully initialized! TX: ${tx}`);
+    } catch (error: unknown) {
+      console.error("Error initializing:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
-      setIsInitializing(false);
+      setLoading(false);
     }
   };
 
-  const registerMachine = async () => {
-    if (!machineId.trim()) {
-      toast.error("Machine ID is required");
-      return;
-    }
-
+  // Delegate the account to delegation program
+  const delegateAccount = async () => {
     try {
-      setIsRegistering(true);
-      const program = getProgram();
+      setLoading(true);
+      setMessage("Delegating account...");
       
-      if (!program || !wallet) {
-        toast.error("Wallet not connected");
-        return;
-      }
-
-      // Find the PDAs
-      const [clusterPda] = PublicKey.findProgramAddressSync(
+      const program = getProgram();
+      const provider = getProvider();
+      
+      // Get cluster PDA
+      const [clusterPDA] = PublicKey.findProgramAddressSync(
         [Buffer.from("cluster")],
-        PROGRAM_ID
+        program.programId
       );
+      
+      const tx = await program.methods
+        .delegate()
+        .accounts({
+          payer: provider.wallet.publicKey,
+          pda: clusterPDA
+        })
+        .rpc();
+      
+      setMessage(`Successfully delegated! TX: ${tx}`);
+    } catch (error: unknown) {
+      console.error("Error delegating:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      // According to IDL, machine PDA uses "agrox" prefix, not "machine"
-      const [machinePda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("agrox"), Buffer.from(machineId)],
-        PROGRAM_ID
+  // Undelegate the account from delegation program
+  const undelegateAccount = async () => {
+    try {
+      setLoading(true);
+      setMessage("Undelegating account...");
+      
+      const program = getProgram();
+      const provider = getProvider();
+      
+      // Get cluster PDA
+      const [clusterPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("cluster")],
+        program.programId
       );
+      
+      // Note: The magic_context and magic_program accounts would need to be properly defined
+      // based on the actual delegate program infrastructure
+      const tx = await program.methods
+        .undelegate()
+        .accounts({
+          payer: provider.wallet.publicKey,
+          pda: clusterPDA,
+          magicContext: new PublicKey("MagicContext1111111111111111111111111111111"),
+          magicProgram: new PublicKey("Magic11111111111111111111111111111111111111"),
+        })
+        .rpc();
+      
+      setMessage(`Successfully undelegated! TX: ${tx}`);
+    } catch (error: unknown) {
+      console.error("Error undelegating:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      console.log("Machine PDA being used:", machinePda.toBase58());
-
-      // Call the register_machine instruction
-      console.log("Available program methods for register:", Object.keys(program.methods));
+  // Register a new machine
+  const registerMachine = async (machineId: string) => {
+    try {
+      setLoading(true);
+      setMessage(`Registering machine ${machineId}...`);
+      
+      const program = getProgram();
+      const provider = getProvider();
+      
+      // Get cluster PDA
+      const [clusterPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("cluster")],
+        program.programId
+      );
+      
+      // Machine PDA with correct seed
+      const [machinePDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        program.programId
+      );
+      
       const tx = await program.methods
         .registerMachine(machineId)
         .accounts({
-          cluster: clusterPda,
-          machine: machinePda,
-          user: wallet.publicKey,
-          systemProgram: SystemProgram.programId,
+          cluster: clusterPDA,
+          machine: machinePDA,
+          user: provider.wallet.publicKey,
+          systemProgram: SystemProgram.programId
         })
-        .rpc({
-          skipPreflight: true,
-          commitment: 'confirmed',
-          maxRetries: 3
-        });
+        .rpc();
       
-      toast.success(`Machine ${machineId} registered successfully`);
-      console.log("Transaction signature:", tx);
-      setMachineId("");
-    } catch (error) {
+      setMessage(`Machine registered successfully! TX: ${tx}`);
+    } catch (error: unknown) {
       console.error("Error registering machine:", error);
-      toast.error(`Failed to register machine: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
-      setIsRegistering(false);
+      setLoading(false);
     }
   };
 
-  const getMachineData = async () => {
+  // Create a new plant
+  const createPlant = async (machineId: string, plantName: string) => {
     try {
+      setLoading(true);
+      setMessage(`Creating plant ${plantName} for machine ${machineId}...`);
+      
       const program = getProgram();
-      if (!program || !wallet) {
-        toast.error("Wallet not connected");
-        return;
-      }
+      const provider = getProvider();
       
-      const[machinePda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("agrox"), Buffer.from(machineId)],
-        PROGRAM_ID
-      );
-
-      console.log("Machine PDA:", machinePda.toBase58());
-      
-      // Try to fetch machine account data
-      try {
-        // @ts-expect-error - Bypass TypeScript checks since account structure comes from IDL
-        const machineAccount = await program.account.machine.fetch(machinePda);
-        console.log("Machine data:", machineAccount);
-      } catch (error) {
-        console.log("Machine account may not exist yet:", error);
-      }
-      
-    } catch (error) {
-      console.error("Error fetching machine data:", error);
-      toast.error(`Failed to fetch machine data: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
-
-  const find_cluster_pda = async () => {
-    try {
-      const program = getProgram();
-      if (!program || !wallet) {
-        toast.error("Wallet not connected");
-        return;
-      }
-
-      const[clusterPda] = PublicKey.findProgramAddressSync(
+      // Get cluster PDA
+      const [clusterPDA] = PublicKey.findProgramAddressSync(
         [Buffer.from("cluster")],
-        PROGRAM_ID
+        program.programId
       );
-      console.log("Cluster PDA:", clusterPda.toBase58());
-
-      // Get raw account data first
-      const accountInfo = await connection.getAccountInfo(clusterPda);
-      console.log("Account info (raw):", accountInfo);
       
-      if (accountInfo) {
-        try {
-          // First try Anchor deserialization
-          console.log("Deserializing cluster account using Anchor");
-          // @ts-expect-error - Bypass TypeScript checks since account structure comes from IDL
-          const clusterAccount = await program.account.cluster.fetch(clusterPda);
-          console.log("Cluster account (Deserialized with Anchor):", clusterAccount);
-        } catch {
-          console.log("Failed to deserialize using Anchor, trying borsh");
-          
-          // For debugging: try to decode with borsh
-          if (accountInfo?.data) {
-            const decodedData = deserializeClusterAccount(accountInfo.data);
-            console.log("Cluster account (Deserialized with borsh):", decodedData);
-            
-            // For debugging: also log raw data
-            // console.log("Raw Buffer:", Buffer.from(accountInfo.data));
-            // console.log("Discriminator:", Buffer.from(accountInfo.data.slice(0, 8)));
-          }
-        }
-      } else {
-        console.log("Cluster account doesn't exist");
-      }
+      // Machine PDA
+      const [machinePDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        program.programId
+      );
       
-      console.log("Cluster PDA:", clusterPda.toBase58());
+      // Plant PDA with updated seed - now using plant name instead of machine id
+      const [plantPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("plant"), Buffer.from(plantName)],
+        program.programId
+      );
       
-    } catch (error) {
-      console.error("Error finding cluster state:", error);
-      toast.error(`Failed to find cluster state: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
-
-  // Function to fetch all machine accounts
-  const fetchAllMachines = async () => {
-    try {
-      setIsLoadingMachines(true);
-      const program = getProgram();
-      if (!program || !wallet) {
-        toast.error("Wallet not connected");
-        return;
-      }
-
-      // @ts-expect-error - Bypass TypeScript checks since account structure comes from IDL
-      const allMachines = await program.account.machine.all();
-      console.log("All machines:", allMachines);
+      const tx = await program.methods
+        .createPlant(plantName)
+        .accounts({
+          cluster: clusterPDA,
+          plant: plantPDA,
+          machine: machinePDA,
+          user: provider.wallet.publicKey,
+          systemProgram: SystemProgram.programId
+        })
+        .rpc();
       
-      // Define the expected structure for the account
-      type MachineAccountRaw = {
-        owner: PublicKey;
-        machineId: string;
-        isActive: boolean;
-        dataCount: { toNumber: () => number };
-        imageCount: { toNumber: () => number };
-        rewardsEarned: { toNumber: () => number };
-        lastDataTimestamp: { toNumber: () => number };
-        lastImageTimestamp: { toNumber: () => number };
-        dataUsedCount: { toNumber: () => number };
-        authBump: number;
-        bump: number;
-      };
-      
-      // Transform data to match our expected format
-      const machineAccounts = allMachines.map((item: { account: MachineAccountRaw; publicKey: PublicKey }) => {
-        const account = item.account;
-        return {
-          owner: account.owner,
-          machineId: account.machineId,
-          isActive: account.isActive,
-          dataCount: account.dataCount.toNumber(),
-          imageCount: account.imageCount.toNumber(),
-          rewardsEarned: account.rewardsEarned.toNumber(),
-          lastDataTimestamp: account.lastDataTimestamp.toNumber(),
-          lastImageTimestamp: account.lastImageTimestamp.toNumber(),
-          dataUsedCount: account.dataUsedCount.toNumber(),
-          authBump: account.authBump,
-          bump: account.bump,
-          publicKey: item.publicKey,
-        };
-      });
-      
-      setRegisteredMachines(machineAccounts);
-    } catch (error) {
-      console.error("Error fetching machines:", error);
-      toast.error(`Failed to fetch machines: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setMessage(`Plant created successfully! TX: ${tx}`);
+    } catch (error: unknown) {
+      console.error("Error creating plant:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
-      setIsLoadingMachines(false);
+      setLoading(false);
     }
   };
 
-  const startMachine = async (machineId: string, publicKey: PublicKey) => {
+  // Start a machine
+  const startMachine = async (machineId: string) => {
     try {
-      // Update processing state
-      setIsProcessing(prev => ({ ...prev, [machineId]: true }));
+      setLoading(true);
+      setMessage(`Starting machine ${machineId}...`);
       
       const program = getProgram();
-      if (!program || !wallet) {
-        toast.error("Wallet not connected");
-        return;
-      }
-
-      // Call the start_machine instruction
+      const provider = getProvider();
+      
+      // Machine PDA
+      const [machinePDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        program.programId
+      );
+      
       const tx = await program.methods
         .startMachine()
         .accounts({
-          machine: publicKey,
-          user: wallet.publicKey,
+          machine: machinePDA,
+          user: provider.wallet.publicKey
         })
-        .rpc({
-          skipPreflight: true,
-          commitment: 'confirmed',
-          maxRetries: 3
-        });
+        .rpc();
       
-      toast.success(`Machine ${machineId} started successfully`);
-      console.log("Transaction signature:", tx);
-      
-      // Refresh the machine list
-      fetchAllMachines();
-    } catch (error) {
-      console.error(`Error starting machine ${machineId}:`, error);
-      toast.error(`Failed to start machine: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setMessage(`Machine started successfully! TX: ${tx}`);
+    } catch (error: unknown) {
+      console.error("Error starting machine:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
-      // Clear processing state
-      setIsProcessing(prev => ({ ...prev, [machineId]: false }));
+      setLoading(false);
     }
   };
 
-  const stopMachine = async (machineId: string, publicKey: PublicKey) => {
+  // Stop a machine
+  const stopMachine = async (machineId: string) => {
     try {
-      // Update processing state
-      setIsProcessing(prev => ({ ...prev, [machineId]: true }));
+      setLoading(true);
+      setMessage(`Stopping machine ${machineId}...`);
       
       const program = getProgram();
-      if (!program || !wallet) {
-        toast.error("Wallet not connected");
-        return;
-      }
-
-      // Call the stop_machine instruction
+      const provider = getProvider();
+      
+      // Machine PDA
+      const [machinePDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        program.programId
+      );
+      
       const tx = await program.methods
         .stopMachine()
         .accounts({
-          machine: publicKey,
-          user: wallet.publicKey,
+          machine: machinePDA,
+          user: provider.wallet.publicKey
         })
-        .rpc({
-          skipPreflight: true,
-          commitment: 'confirmed',
-          maxRetries: 3
-        });
+        .rpc();
       
-      toast.success(`Machine ${machineId} stopped successfully`);
-      console.log("Transaction signature:", tx);
-      
-      // Refresh the machine list
-      fetchAllMachines();
-    } catch (error) {
-      console.error(`Error stopping machine ${machineId}:`, error);
-      toast.error(`Failed to stop machine: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setMessage(`Machine stopped successfully! TX: ${tx}`);
+    } catch (error: unknown) {
+      console.error("Error stopping machine:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
-      // Clear processing state
-      setIsProcessing(prev => ({ ...prev, [machineId]: false }));
+      setLoading(false);
     }
   };
 
-  // Function to fetch all plants
-  const fetchAllPlants = async () => {
+  // Upload data from a machine
+  const uploadData = async (
+    machineId: string, 
+    plantName: string, 
+    temperature: number, 
+    humidity: number, 
+    imageUrl?: string
+  ) => {
     try {
-      setIsLoadingPlants(true);
+      setLoading(true);
+      setMessage(`Uploading data for machine ${machineId}...`);
+      
       const program = getProgram();
-      if (!program || !wallet) {
-        toast.error("Wallet not connected");
-        return;
-      }
-
-      // @ts-expect-error - Bypass TypeScript checks since account structure comes from IDL
-      const allPlants = await program.account.plantData.all();
-      console.log("All plants:", allPlants);
+      const provider = getProvider();
       
-      // Define the expected structure for the plant account
-      type PlantAccountRaw = {
-        creator: PublicKey;
-        plantName: string;
-        dataCount: { toNumber: () => number };
-        imageCount: { toNumber: () => number };
-        creationTimestamp: { toNumber: () => number };
-        lastUpdateTimestamp: { toNumber: () => number };
-        bump: number;
-      };
-      
-      // Transform data to match our expected format
-      const plantAccounts = allPlants.map((item: { account: PlantAccountRaw; publicKey: PublicKey }) => {
-        const account = item.account;
-        return {
-          creator: account.creator,
-          plantName: account.plantName,
-          dataCount: account.dataCount.toNumber(),
-          imageCount: account.imageCount.toNumber(),
-          creationTimestamp: account.creationTimestamp.toNumber(),
-          lastUpdateTimestamp: account.lastUpdateTimestamp.toNumber(),
-          bump: account.bump,
-          publicKey: item.publicKey,
-        };
-      });
-      
-      setPlants(plantAccounts);
-    } catch (error) {
-      console.error("Error fetching plants:", error);
-      toast.error(`Failed to fetch plants: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsLoadingPlants(false);
-    }
-  };
-
-  // Function to create a new plant
-  const createPlant = async () => {
-    if (!plantName.trim()) {
-      toast.error("Plant name is required");
-      return;
-    }
-
-    // Check if a plant with this name already exists
-    if (plants.some(p => p.plantName === plantName)) {
-      toast.error(`A plant named "${plantName}" already exists`);
-      return;
-    }
-
-    try {
-      setIsCreatingPlant(true);
-      const program = getProgram();
-      
-      if (!program || !wallet?.publicKey) {
-        toast.error("Wallet not connected");
-        return;
-      }
-
-      // Find the PDAs
-      const [clusterPda] = PublicKey.findProgramAddressSync(
+      // Get cluster PDA
+      const [clusterPDA] = PublicKey.findProgramAddressSync(
         [Buffer.from("cluster")],
-        PROGRAM_ID
+        program.programId
       );
-
-      const [plantPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("agrox"), Buffer.from(plantName)],
-        PROGRAM_ID
+      
+      // Machine PDA
+      const [machinePDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        program.programId
       );
-
-      console.log("Creating plant with name:", plantName);
-      console.log("Plant PDA:", plantPda.toString());
-      console.log("Cluster PDA:", clusterPda.toString());
-      console.log("User wallet:", wallet.publicKey.toString());
       
-      // Create instruction with explicit program ID to ensure it's correctly identified
-      const ix = await program.methods
-        .createPlant(plantName)
-        .accounts({
-          cluster: clusterPda,
-          plant: plantPda,
-          user: wallet.publicKey,
-          systemProgram: SystemProgram.programId,
-        })
-        .instruction();
-        
-      // Create transaction manually for better control
-      const latestBlockhash = await connection.getLatestBlockhash('confirmed');
-      const transaction = new Transaction({
-        feePayer: wallet.publicKey,
-        ...latestBlockhash,
-      });
-      
-      transaction.add(ix);
-      
-      // Sign and send the transaction
-      if (!program.provider) {
-        throw new Error("Provider is undefined");
-      }
-      
-      const provider = program.provider as anchor.AnchorProvider;
-      const signature = await provider.sendAndConfirm(transaction, [], {
-        skipPreflight: true,
-        commitment: 'confirmed',
-        maxRetries: 3,
-      });
-      
-      toast.success(`Plant ${plantName} created successfully`);
-      console.log("Transaction signature:", signature);
-      setPlantName("");
-      setCreatePlantOpen(false);
-      
-      // Refresh the plant list
-      await fetchAllPlants();
-    } catch (error) {
-      console.error("Error creating plant:", error);
-      
-      // More detailed error handling
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.log("Full error object:", error);
-      
-      if (errorMessage.includes("AccountDidNotSerialize")) {
-        toast.error("Account serialization error. Cluster might not be initialized.");
-      } else if (errorMessage.includes("Unknown action")) {
-        toast.error("Transaction action error. This could be a duplicate or malformed transaction.");
-      } else if (errorMessage.includes("0x1771")) {
-        toast.error("Anchor program error: MachineIdAlreadyExists");
-      } else if (errorMessage.includes("0x1772")) {
-        toast.error("Anchor program error: Unauthorized");
-      } else if (errorMessage.includes("0x1773")) {
-        toast.error("Anchor program error: MachineNotActive");
-      } else if (errorMessage.includes("0x1774")) {
-        toast.error("Anchor program error: NoRewardsAvailable");
-      } else if (errorMessage.includes("0x1775")) {
-        toast.error("Anchor program error: UnregisteredPlant");
-      } else if (errorMessage.includes("0x1776")) {
-        toast.error("Anchor program error: InvalidDataEntryIndex");
-      } else {
-        toast.error(`Failed to create plant: ${errorMessage.substring(0, 100)}...`);
-      }
-    } finally {
-      setIsCreatingPlant(false);
-    }
-};
-
-  // Function to upload data
-  const uploadData = async () => {
-    if (!selectedMachine || !selectedPlant) {
-      toast.error("Please select both a machine and a plant");
-      return;
-    }
-
-    if (!temperature.trim() || !humidity.trim()) {
-      toast.error("Temperature and humidity are required");
-      return;
-    }
-
-    try {
-      setIsUploadingData(true);
-      const program = getProgram();
-      
-      if (!program || !wallet) {
-        toast.error("Wallet not connected");
-        return;
-      }
-
-      // Find the machine and plant from selections
-      const machine = registeredMachines.find(m => m.machineId === selectedMachine);
-      const plant = plants.find(p => p.plantName === selectedPlant);
-
-      if (!machine || !plant) {
-        toast.error("Selected machine or plant not found");
-        return;
-      }
-
-      // Find the cluster PDA
-      const [clusterPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("cluster")],
-        PROGRAM_ID
+      // Plant PDA with updated seed
+      const [plantPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("plant"), Buffer.from(plantName)],
+        program.programId
       );
-
-      // Find the data PDA
-      const [dataPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("agrox"), machine.publicKey.toBuffer(), plant.publicKey.toBuffer()],
-        PROGRAM_ID
+      
+      // Data PDA with correct seeds - machine ID and plant name
+      const [dataPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("data"), Buffer.from(machineId), Buffer.from(plantName)],
+        program.programId
       );
-
-      // Find the auth PDA
-      const [authPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("machine-auth"), Buffer.from(machine.machineId)],
-        PROGRAM_ID
-      );
-
-      // Parse temperature and humidity as floats
-      const tempValue = parseFloat(temperature);
-      const humidityValue = parseFloat(humidity);
-
-      // Call the upload_data instruction
+      
       const tx = await program.methods
-        .uploadData(tempValue, humidityValue, imageUrl.trim() ? imageUrl : null)
+        .uploadData(temperature, humidity, imageUrl || null)
         .accounts({
-          cluster: clusterPda,
-          machine: machine.publicKey,
-          plant: plant.publicKey,
-          data: dataPda,
-          authPda: authPda,
-          payer: wallet.publicKey,
-          systemProgram: SystemProgram.programId,
+          cluster: clusterPDA,
+          machine: machinePDA,
+          plant: plantPDA,
+          data: dataPDA,
+          payer: provider.wallet.publicKey,
+          systemProgram: SystemProgram.programId
         })
-        .rpc({
-          skipPreflight: true,
-          commitment: 'confirmed',
-          maxRetries: 3
-        });
+        .rpc();
       
-      toast.success(`Data uploaded successfully for ${machine.machineId} and ${plant.plantName}`);
-      console.log("Transaction signature:", tx);
-      
-      // Reset form and close dialog
-      setTemperature("25.0");
-      setHumidity("60.0");
-      setImageUrl("");
-      setUploadDataOpen(false);
-      
-      // Refresh data
-      await fetchAllMachines();
-      await fetchAllPlants();
-    } catch (error) {
+      setMessage(`Data uploaded successfully! TX: ${tx}`);
+    } catch (error: unknown) {
       console.error("Error uploading data:", error);
-      toast.error(`Failed to upload data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
-      setIsUploadingData(false);
+      setLoading(false);
     }
   };
 
-  return (
-    <div className="container mx-auto p-6 space-y-6">
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>AgroX Contract Initialization</CardTitle>
-          <CardDescription>Initialize the AgroX contract on Solana</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button 
-            onClick={initializeContract} 
-            disabled={isInitializing || !wallet || isInitialized}
+  // Use data from a specific entry
+  const handleDataUsage = async (machineId: string, plantName: string, entryIndex: number) => {
+    try {
+      setLoading(true);
+      setMessage(`Using data entry ${entryIndex} from machine ${machineId}...`);
+      
+      const program = getProgram();
+      const provider = getProvider();
+      
+      // Get cluster PDA
+      const [clusterPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("cluster")],
+        program.programId
+      );
+      
+      // Machine PDA
+      const [machinePDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        program.programId
+      );
+      
+      // Data PDA with correct seeds
+      const [dataPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("data"), Buffer.from(machineId), Buffer.from(plantName)],
+        program.programId
+      );
+      
+      const tx = await program.methods
+        .useData(new anchor.BN(entryIndex))
+        .accounts({
+          cluster: clusterPDA,
+          machine: machinePDA,
+          data: dataPDA,
+          user: provider.wallet.publicKey
+        })
+        .rpc();
+      
+      setMessage(`Data used successfully! TX: ${tx}`);
+    } catch (error: unknown) {
+      console.error("Error using data:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Claim rewards for a machine
+  const claimRewards = async (machineId: string) => {
+    try {
+      setLoading(true);
+      setMessage(`Claiming rewards for machine ${machineId}...`);
+      
+      const program = getProgram();
+      const provider = getProvider();
+      
+      // Machine PDA
+      const [machinePDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        program.programId
+      );
+      
+      const tx = await program.methods
+        .claimRewards()
+        .accounts({
+          machine: machinePDA,
+          user: provider.wallet.publicKey
+        })
+        .rpc();
+      
+      setMessage(`Rewards claimed successfully! TX: ${tx}`);
+    } catch (error: unknown) {
+      console.error("Error claiming rewards:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Tab Content Components
+  const InitializationTab = () => (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Initialization</h2>
+      <p className="text-gray-600">Initialize the AgroX contract with a new cluster.</p>
+      <button 
+        onClick={initialize} 
+        className="w-full bg-gradient-to-r from-green-400 to-blue-500 text-white px-6 py-3 rounded-md shadow-md hover:shadow-lg transition-all duration-200 font-medium"
+        disabled={loading}
+      >
+        Initialize Contract
+      </button>
+    </div>
+  );
+
+  const DelegationTab = () => (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Account Delegation</h2>
+      <p className="text-gray-600">Manage account delegation to the delegation program.</p>
+      <div className="flex gap-4">
+        <button 
+          onClick={delegateAccount} 
+          className="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-4 py-3 rounded-md shadow-md transition-colors duration-200"
+          disabled={loading}
+        >
+          Delegate
+        </button>
+        <button 
+          onClick={undelegateAccount} 
+          className="flex-1 bg-red-500 hover:bg-red-600 text-white px-4 py-3 rounded-md shadow-md transition-colors duration-200"
+          disabled={loading}
+        >
+          Undelegate
+        </button>
+      </div>
+    </div>
+  );
+
+  const MachineTab = () => (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Machine Management</h2>
+      <p className="text-gray-600">Register and control your IoT machines.</p>
+      <div className="space-y-3">
+        <div className="relative">
+          <label htmlFor="machineId" className="block text-sm font-medium text-gray-700 mb-1">Machine ID</label>
+          <input 
+            type="text" 
+            id="machineId" 
+            placeholder="Enter machine identifier" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <div className="grid grid-cols-3 gap-2 mt-2">
+          <button 
+            onClick={() => registerMachine((document.getElementById('machineId') as HTMLInputElement).value)} 
+            className="bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+            disabled={loading}
           >
-            {isInitializing ? "Initializing..." : isInitialized ? "Contract Initialized" : "Initialize Contract"}
-          </Button>
-        </CardContent>
-      </Card>
+            Register
+          </button>
+          <button 
+            onClick={() => startMachine((document.getElementById('machineId') as HTMLInputElement).value)} 
+            className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+            disabled={loading}
+          >
+            Start
+          </button>
+          <button 
+            onClick={() => stopMachine((document.getElementById('machineId') as HTMLInputElement).value)} 
+            className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+            disabled={loading}
+          >
+            Stop
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
-      {isInitialized && (
-        <>
-          <Card className="w-full">
-            <CardHeader>
-              <CardTitle>Register Machine</CardTitle>
-              <CardDescription>Register a new IoT machine to the AgroX system</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-4">
-                <Input
-                  placeholder="Enter machine ID"
-                  value={machineId}
-                  onChange={(e) => setMachineId(e.target.value)}
-                  disabled={isRegistering || !wallet}
-                />
-                <Button 
-                  onClick={registerMachine} 
-                  disabled={isRegistering || !wallet || !machineId.trim()}
+  const PlantTab = () => (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Plant Management</h2>
+      <p className="text-gray-600">Create and manage plants for your machines.</p>
+      <div className="space-y-3">
+        <div className="relative">
+          <label htmlFor="plantMachineId" className="block text-sm font-medium text-gray-700 mb-1">Machine ID</label>
+          <input 
+            type="text" 
+            id="plantMachineId" 
+            placeholder="Enter machine identifier" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <div className="relative">
+          <label htmlFor="plantName" className="block text-sm font-medium text-gray-700 mb-1">Plant Name</label>
+          <input 
+            type="text" 
+            id="plantName" 
+            placeholder="Enter plant name" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <button 
+          onClick={() => createPlant(
+            (document.getElementById('plantMachineId') as HTMLInputElement).value,
+            (document.getElementById('plantName') as HTMLInputElement).value
+          )} 
+          className="w-full bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+          disabled={loading}
+        >
+          Create Plant
+        </button>
+      </div>
+    </div>
+  );
+
+  const DataUploadTab = () => (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Data Upload</h2>
+      <p className="text-gray-600">Upload sensor data and images from your machines.</p>
+      <div className="space-y-3">
+        <div className="relative">
+          <label htmlFor="dataMachineId" className="block text-sm font-medium text-gray-700 mb-1">Machine ID</label>
+          <input 
+            type="text" 
+            id="dataMachineId" 
+            placeholder="Enter machine identifier" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <div className="relative">
+          <label htmlFor="dataPlantName" className="block text-sm font-medium text-gray-700 mb-1">Plant Name</label>
+          <input 
+            type="text" 
+            id="dataPlantName" 
+            placeholder="Enter plant name" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="relative">
+            <label htmlFor="temperature" className="block text-sm font-medium text-gray-700 mb-1">Temperature</label>
+            <input 
+              type="number" 
+              id="temperature" 
+              placeholder="°C" 
+              className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+            />
+          </div>
+          <div className="relative">
+            <label htmlFor="humidity" className="block text-sm font-medium text-gray-700 mb-1">Humidity</label>
+            <input 
+              type="number" 
+              id="humidity" 
+              placeholder="%" 
+              className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+            />
+          </div>
+        </div>
+        <div className="relative">
+          <label htmlFor="imageUrl" className="block text-sm font-medium text-gray-700 mb-1">Image URL (optional)</label>
+          <input 
+            type="text" 
+            id="imageUrl" 
+            placeholder="Enter image URL" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <button 
+          onClick={() => uploadData(
+            (document.getElementById('dataMachineId') as HTMLInputElement).value,
+            (document.getElementById('dataPlantName') as HTMLInputElement).value,
+            parseFloat((document.getElementById('temperature') as HTMLInputElement).value),
+            parseFloat((document.getElementById('humidity') as HTMLInputElement).value),
+            (document.getElementById('imageUrl') as HTMLInputElement).value
+          )} 
+          className="w-full bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+          disabled={loading}
+        >
+          Upload Data
+        </button>
+      </div>
+    </div>
+  );
+
+  const DataUsageTab = () => (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Data Usage</h2>
+      <p className="text-gray-600">Access data entries and use them in applications.</p>
+      <div className="space-y-3">
+        <div className="relative">
+          <label htmlFor="useDataMachineId" className="block text-sm font-medium text-gray-700 mb-1">Machine ID</label>
+          <input 
+            type="text" 
+            id="useDataMachineId" 
+            placeholder="Enter machine identifier" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <div className="relative">
+          <label htmlFor="useDataPlantName" className="block text-sm font-medium text-gray-700 mb-1">Plant Name</label>
+          <input 
+            type="text" 
+            id="useDataPlantName" 
+            placeholder="Enter plant name" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <div className="relative">
+          <label htmlFor="entryIndex" className="block text-sm font-medium text-gray-700 mb-1">Entry Index</label>
+          <input 
+            type="number" 
+            id="entryIndex" 
+            placeholder="Data entry index" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <button 
+          onClick={() => handleDataUsage(
+            (document.getElementById('useDataMachineId') as HTMLInputElement).value,
+            (document.getElementById('useDataPlantName') as HTMLInputElement).value,
+            parseInt((document.getElementById('entryIndex') as HTMLInputElement).value)
+          )} 
+          className="w-full bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+          disabled={loading}
+        >
+          Use Data
+        </button>
+      </div>
+    </div>
+  );
+
+  const RewardsTab = () => (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Rewards Management</h2>
+      <p className="text-gray-600">Claim rewards earned from your machine data usage.</p>
+      <div className="space-y-3">
+        <div className="relative">
+          <label htmlFor="rewardsMachineId" className="block text-sm font-medium text-gray-700 mb-1">Machine ID</label>
+          <input 
+            type="text" 
+            id="rewardsMachineId" 
+            placeholder="Enter machine identifier" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <button 
+          onClick={() => claimRewards(
+            (document.getElementById('rewardsMachineId') as HTMLInputElement).value
+          )} 
+          className="w-full bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+          disabled={loading}
+        >
+          Claim Rewards
+        </button>
+      </div>
+    </div>
+  );
+
+  // Tab configuration
+  const tabs = [
+    { id: "initialize", label: "Initialize", component: InitializationTab },
+    { id: "delegate", label: "Delegation", component: DelegationTab },
+    { id: "machine", label: "Machines", component: MachineTab },
+    { id: "plant", label: "Plants", component: PlantTab },
+    { id: "data", label: "Upload Data", component: DataUploadTab },
+    { id: "usage", label: "Use Data", component: DataUsageTab },
+    { id: "rewards", label: "Rewards", component: RewardsTab }
+  ];
+
+  // Render the current active tab component
+  const renderActiveTab = () => {
+    const tab = tabs.find(t => t.id === activeTab);
+    if (tab) {
+      const TabComponent = tab.component;
+      return <TabComponent />;
+    }
+    return null;
+  };
+
+  // Get status color based on message content
+  const getStatusColor = () => {
+    if (message.includes("Error")) return "bg-red-100 border-red-300 text-red-800";
+    if (message.includes("Success")) return "bg-green-100 border-green-300 text-green-800";
+    return "bg-blue-100 border-blue-300 text-blue-800";
+  };
+
+  // Simple UI with tabs for testing the functions
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-4xl mx-auto">
+        <div className="text-center mb-10">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">AgroX Smart Contract Dashboard</h1>
+          <p className="text-lg text-gray-600">Manage your agricultural IoT data on the blockchain</p>
+        </div>
+
+        {!wallet ? (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+            <h2 className="text-xl font-semibold text-yellow-700 mb-2">Wallet Not Connected</h2>
+            <p className="text-yellow-600 mb-4">Please connect your Solana wallet to interact with the contract.</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+            {/* Tab navigation */}
+            <div className="flex overflow-x-auto scrollbar-hide border-b border-gray-200">
+              {tabs.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-6 py-4 text-sm font-medium whitespace-nowrap transition-colors ${
+                    activeTab === tab.id 
+                      ? "border-b-2 border-blue-500 text-blue-600"
+                      : "text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  }`}
                 >
-                  {isRegistering ? "Registering..." : "Register Machine"}
-                </Button>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Status message */}
+            {message && (
+              <div className={`m-4 p-4 rounded-md border ${getStatusColor()}`}>
+                <p>{message}</p>
               </div>
-            </CardContent>
-          </Card>
+            )}
 
-          <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold">Data Management</h2>
-            
-            <div className="flex gap-2">
-              <Dialog open={createPlantOpen} onOpenChange={setCreatePlantOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline">Create Plant</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Create a New Plant</DialogTitle>
-                    <DialogDescription>
-                      Enter a unique name for your plant
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="plant-name" className="text-right">
-                        Plant Name
-                      </Label>
-                      <Input
-                        id="plant-name"
-                        placeholder="Enter plant name"
-                        className="col-span-3"
-                        value={plantName}
-                        onChange={(e) => setPlantName(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      onClick={createPlant}
-                      disabled={isCreatingPlant || !plantName.trim()}
-                    >
-                      {isCreatingPlant ? "Creating..." : "Create Plant"}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+            {/* Loading indicator */}
+            {loading && (
+              <div className="flex justify-center items-center p-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                <span className="ml-2 text-gray-600">Processing...</span>
+              </div>
+            )}
 
-              <Dialog open={uploadDataOpen} onOpenChange={(open) => {
-                setUploadDataOpen(open);
-                if (open) {
-                  // When dialog opens, refresh the machine and plant lists
-                  fetchAllMachines();
-                  fetchAllPlants();
-                  console.log("Dialog opened with machines:", registeredMachines);
-                }
-              }}>
-                <DialogTrigger asChild>
-                  <Button>Upload Data</Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[425px]">
-                  <DialogHeader>
-                    <DialogTitle>Upload Sensor Data</DialogTitle>
-                    <DialogDescription>
-                      Record temperature, humidity, and optional image data for a plant
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="machine" className="text-right">
-                        Machine
-                      </Label>
-                      <div className="col-span-3 space-y-1">
-                        {registeredMachines.length === 0 ? (
-                          <div className="text-sm text-muted-foreground">No machines available. Please register a machine first.</div>
-                        ) : !registeredMachines.some(m => m.isActive) ? (
-                          <div className="text-sm text-muted-foreground">No active machines. Please start a machine first.</div>
-                        ) : null}
-                        <Select
-                          value={selectedMachine}
-                          onValueChange={setSelectedMachine}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select a machine" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {registeredMachines.map((machine, idx) => (
-                              <SelectItem 
-                                key={idx} 
-                                value={machine.machineId}
-                                disabled={!machine.isActive}
-                              >
-                                {machine.machineId} {!machine.isActive && "(Inactive)"}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="plant" className="text-right">
-                        Plant
-                      </Label>
-                      <div className="col-span-3 space-y-1">
-                        {plants.length === 0 && (
-                          <div className="text-sm text-muted-foreground">No plants available. Please create a plant first.</div>
-                        )}
-                        <Select
-                          value={selectedPlant}
-                          onValueChange={setSelectedPlant}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select a plant" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {plants.map((plant, idx) => (
-                              <SelectItem key={idx} value={plant.plantName}>
-                                {plant.plantName}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="temperature" className="text-right">
-                        Temperature
-                      </Label>
-                      <Input
-                        id="temperature"
-                        placeholder="Enter temperature in °C"
-                        className="col-span-3"
-                        type="number"
-                        step="0.1"
-                        value={temperature}
-                        onChange={(e) => setTemperature(e.target.value)}
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="humidity" className="text-right">
-                        Humidity
-                      </Label>
-                      <Input
-                        id="humidity"
-                        placeholder="Enter humidity in %"
-                        className="col-span-3"
-                        type="number"
-                        step="0.1"
-                        value={humidity}
-                        onChange={(e) => setHumidity(e.target.value)}
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="image-url" className="text-right">
-                        Image URL
-                      </Label>
-                      <Input
-                        id="image-url"
-                        placeholder="Optional image URL"
-                        className="col-span-3"
-                        value={imageUrl}
-                        onChange={(e) => setImageUrl(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      onClick={uploadData}
-                      disabled={
-                        isUploadingData ||
-                        !selectedMachine ||
-                        !selectedPlant ||
-                        !temperature ||
-                        !humidity ||
-                        registeredMachines.length === 0 ||
-                        plants.length === 0
-                      }
-                    >
-                      {isUploadingData ? "Uploading..." : "Upload Data"}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-              
-              <Button variant="outline" onClick={fetchAllMachines} disabled={isLoadingMachines}>
-                {isLoadingMachines ? "Refreshing..." : "Refresh"}
-              </Button>
+            {/* Active tab content */}
+            <div className="p-6">
+              {renderActiveTab()}
             </div>
           </div>
+        )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Registered Machines</CardTitle>
-                <CardDescription>All machines registered to the AgroX system</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                {registeredMachines.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Machine ID</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Action</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {registeredMachines.map((machine, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="font-medium">{machine.machineId}</TableCell>
-                          <TableCell>
-                            <Badge variant={machine.isActive ? "default" : "destructive"}>
-                              {machine.isActive ? "Active" : "Inactive"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{machine.dataCount} entries</TableCell>
-                          <TableCell>
-                            {machine.isActive ? (
-                              <Button 
-                                variant="destructive" 
-                                size="sm"
-                                onClick={() => stopMachine(machine.machineId, machine.publicKey)}
-                                disabled={isProcessing[machine.machineId]}
-                              >
-                                {isProcessing[machine.machineId] ? "..." : "Stop"}
-                              </Button>
-                            ) : (
-                              <Button 
-                                variant="default" 
-                                size="sm"
-                                onClick={() => startMachine(machine.machineId, machine.publicKey)}
-                                disabled={isProcessing[machine.machineId]}
-                              >
-                                {isProcessing[machine.machineId] ? "..." : "Start"}
-                              </Button>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <div className="text-center py-4">
-                    {isLoadingMachines ? "Loading machines..." : "No machines registered yet"}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Plant Registry</CardTitle>
-                <CardDescription>Plants available for data collection</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                {plants.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Plant Name</TableHead>
-                        <TableHead>Data Count</TableHead>
-                        <TableHead>Last Update</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {plants.map((plant, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="font-medium">{plant.plantName}</TableCell>
-                          <TableCell>{plant.dataCount} entries</TableCell>
-                          <TableCell>
-                            {plant.lastUpdateTimestamp > 0 
-                              ? new Date(plant.lastUpdateTimestamp * 1000).toLocaleString() 
-                              : "Never"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <div className="text-center py-4">
-                    {isLoadingPlants ? "Loading plants..." : "No plants registered yet"}
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter className="flex justify-end">
-                <Button variant="outline" size="sm" onClick={fetchAllPlants}>
-                  Refresh Plants
-                </Button>
-              </CardFooter>
-            </Card>
-          </div>
-        </>
-      )}
+        <div className="mt-8 text-center text-sm text-gray-500">
+          <p>AgroX Contract: Smart agriculture data management on Solana</p>
+        </div>
+      </div>
     </div>
   );
 };
