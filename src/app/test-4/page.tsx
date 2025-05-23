@@ -67,6 +67,7 @@ interface SensorData {
     timestamp: number;
   }>;
   totalReadings: number;
+  is_on: boolean;
 }
 
 // Add this function to create a keypair from private key
@@ -174,6 +175,7 @@ const TestPage = () => {
               timestamp: img.timestamp.toNumber(),
             })),
             totalReadings: accountData.totalReadings.toNumber(),
+            is_on: accountData.is_on,
           };
         } catch (error) {
           console.error("Error decoding account:", error);
@@ -269,6 +271,62 @@ const TestPage = () => {
       await fetchAllMachines();
     } catch (error) {
       console.error("Error adding image data:", error);
+    }
+  };
+
+  const turnOnMachine = async (machineId: string) => {
+    if (!program || !privateKeySigner) {
+      console.error('Program or signer not available');
+      return;
+    }
+
+    try {
+      const [sensorPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        program.programId
+      );
+
+      await program.methods
+        .turnOn()
+        .accounts({
+          sensorData: sensorPDA,
+          user: privateKeySigner.publicKey,
+        })
+        .signers([privateKeySigner])
+        .rpc();
+
+      console.log("Turned on machine:", machineId);
+      await fetchAllMachines();
+    } catch (error) {
+      console.error("Error turning on machine:", error);
+    }
+  };
+
+  const turnOffMachine = async (machineId: string) => {
+    if (!program || !privateKeySigner) {
+      console.error('Program or signer not available');
+      return;
+    }
+
+    try {
+      const [sensorPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        program.programId
+      );
+
+      await program.methods
+        .turnOff()
+        .accounts({
+          sensorData: sensorPDA,
+          user: privateKeySigner.publicKey,
+        })
+        .signers([privateKeySigner])
+        .rpc();
+
+      console.log("Turned off machine:", machineId);
+      await fetchAllMachines();
+    } catch (error) {
+      console.error("Error turning off machine:", error);
     }
   };
 
@@ -437,9 +495,20 @@ const TestPage = () => {
               <div className="space-y-6">
                 {Object.entries(allMachineData).map(([machineId, data]) => (
                   <div key={machineId} className="border rounded-lg p-4 space-y-4">
-                    <div>
-                      <h3 className="text-lg font-semibold mb-2">Machine {machineId}</h3>
-                      <p>Total Readings: {data.totalReadings}</p>
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h3 className="text-lg font-semibold mb-2">Machine {machineId}</h3>
+                        <p>Total Readings: {data.totalReadings}</p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className={`w-3 h-3 rounded-full ${data.is_on ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        <Button
+                          onClick={() => data.is_on ? turnOnMachine(machineId) : turnOffMachine(machineId)}
+                          variant={data.is_on ? "destructive" : "default"}
+                        >
+                          {data.is_on ? 'Turn On' : 'Turn Off'}
+                        </Button>
+                      </div>
                     </div>
 
                     <div>
