@@ -15,29 +15,54 @@ pub mod contract_7 {
         sensor_data.image_data = Vec::new();
         sensor_data.machine_id = machine_id;
         sensor_data.total_readings = 0;
+        sensor_data.is_on = false;
         msg!("Sensor Data Account initialized for machine: {}", sensor_data.machine_id);
         Ok(())
     }
 
-        /// Delegate the account to the delegation program
-        pub fn delegate(ctx: Context<DelegateInput>) -> Result<()> {
-            ctx.accounts.delegate_pda(
-                &ctx.accounts.payer,
-                &[b"machine", ctx.accounts.sensor_data.machine_id.as_bytes()],  
-                DelegateConfig::default(),
-            )?;
-            Ok(())
+    pub fn turn_on(ctx: Context<TogglePower>) -> Result<()> {
+        let sensor_data = &mut ctx.accounts.sensor_data;
+        
+        if sensor_data.is_on {
+            return Err(error!(ErrorCode::MachineAlreadyOn));
         }
 
-        pub fn undelegate(ctx: Context<UndelegateAccounts>) -> Result<()> {
-            commit_and_undelegate_accounts(
-                &ctx.accounts.payer,
-                vec![&ctx.accounts.pda.to_account_info()],
-                &ctx.accounts.magic_context,
-                &ctx.accounts.magic_program,
-            )?;
-            Ok(())
+        sensor_data.is_on = true;
+        msg!("Machine {} turned ON", sensor_data.machine_id);
+        Ok(())
+    }
+
+    pub fn turn_off(ctx: Context<TogglePower>) -> Result<()> {
+        let sensor_data = &mut ctx.accounts.sensor_data;
+        
+        if !sensor_data.is_on {
+            return Err(error!(ErrorCode::MachineAlreadyOff));
         }
+
+        sensor_data.is_on = false;
+        msg!("Machine {} turned OFF", sensor_data.machine_id);
+        Ok(())
+    }
+
+    /// Delegate the account to the delegation program
+    pub fn delegate(ctx: Context<DelegateInput>) -> Result<()> {
+        ctx.accounts.delegate_pda(
+            &ctx.accounts.payer,
+            &[b"machine", ctx.accounts.sensor_data.machine_id.as_bytes()],  
+            DelegateConfig::default(),
+        )?;
+        Ok(())
+    }
+
+    pub fn undelegate(ctx: Context<UndelegateAccounts>) -> Result<()> {
+        commit_and_undelegate_accounts(
+            &ctx.accounts.payer,
+            vec![&ctx.accounts.pda.to_account_info()],
+            &ctx.accounts.magic_context,
+            &ctx.accounts.magic_program,
+        )?;
+        Ok(())
+    }
 
     pub fn add_data(
         ctx: Context<AddData>, 
@@ -45,6 +70,11 @@ pub mod contract_7 {
         humidity: f32,
     ) -> Result<()> {
         let sensor_data = &mut ctx.accounts.sensor_data;
+
+        // Validate machine is turned on
+        if !sensor_data.is_on {
+            return Err(error!(ErrorCode::MachineNotOn));
+        }
 
         // Create new reading
         let new_reading = SensorReading {
@@ -71,6 +101,11 @@ pub mod contract_7 {
         image_uri: String,
     ) -> Result<()> {
         let sensor_data = &mut ctx.accounts.sensor_data;
+
+        // Validate machine is turned on
+        if !sensor_data.is_on {
+            return Err(error!(ErrorCode::MachineNotOn));
+        }
 
         // Validate input lengths
         if image_uri.len() > SensorData::MAX_URI_LENGTH {
@@ -121,6 +156,17 @@ pub struct AddData<'info> {
     pub user: Signer<'info>,
 }
 
+#[derive(Accounts)]
+pub struct TogglePower<'info> {
+    #[account(
+        mut,
+        seeds = [b"machine", sensor_data.machine_id.as_bytes()],
+        bump
+    )]
+    pub sensor_data: Account<'info, SensorData>,
+    pub user: Signer<'info>,
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct SensorReading {
     pub temperature_c: f32,
@@ -141,18 +187,20 @@ pub struct SensorData {
     pub image_data: Vec<ImageData>,
     pub machine_id: String,
     pub total_readings: u64,
+    pub is_on: bool,
 }
 
 impl SensorData {
-    pub const MAX_URI_LENGTH: usize = 200;
+    pub const MAX_URI_LENGTH: usize = 100;
     pub const MAX_MACHINE_ID_LENGTH: usize = 50;
-    pub const MAX_READINGS: usize = 100; // Store up to 100 readings per machine
-    pub const MAX_IMAGES: usize = 100; // Store up to 100 images per machine
+    pub const MAX_READINGS: usize = 50;
+    pub const MAX_IMAGES: usize = 40;
     
     // Calculate total space needed:
     // 8 bytes (discriminator) +
     // (4 + MAX_MACHINE_ID_LENGTH) bytes (String) +
     // 8 bytes (total_readings) +
+    // 1 byte (is_on boolean) +
     // Vec<SensorReading> space:
     //   - 4 bytes (vec len) +
     //   - MAX_READINGS * (
@@ -166,7 +214,7 @@ impl SensorData {
     //     (4 + MAX_URI_LENGTH) bytes (String) +
     //     8 bytes (i64)
     //   )
-    pub const MAX_SIZE: usize = 8 + (4 + SensorData::MAX_MACHINE_ID_LENGTH) + 8 + 
+    pub const MAX_SIZE: usize = 8 + (4 + SensorData::MAX_MACHINE_ID_LENGTH) + 8 + 1 +
         4 + (SensorData::MAX_READINGS * (4 + 4 + 8)) +
         4 + (SensorData::MAX_IMAGES * ((4 + SensorData::MAX_URI_LENGTH) + 8));
 }
@@ -197,4 +245,10 @@ pub enum ErrorCode {
     UriTooLong,
     #[msg("Machine ID is too long")]
     MachineIdTooLong,
+    #[msg("Machine is already turned on")]
+    MachineAlreadyOn,
+    #[msg("Machine is already turned off")]
+    MachineAlreadyOff,
+    #[msg("Machine must be turned on to perform this action")]
+    MachineNotOn,
 }

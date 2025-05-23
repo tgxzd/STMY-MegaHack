@@ -379,6 +379,96 @@
         ]
       },
       {
+        "name": "turn_off",
+        "discriminator": [
+          173,
+          8,
+          5,
+          68,
+          8,
+          117,
+          115,
+          68
+        ],
+        "accounts": [
+          {
+            "name": "sensor_data",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    109,
+                    97,
+                    99,
+                    104,
+                    105,
+                    110,
+                    101
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "sensor_data.machine_id",
+                  "account": "SensorData"
+                }
+              ]
+            }
+          },
+          {
+            "name": "user",
+            "signer": true
+          }
+        ],
+        "args": []
+      },
+      {
+        "name": "turn_on",
+        "discriminator": [
+          231,
+          164,
+          251,
+          197,
+          185,
+          52,
+          153,
+          128
+        ],
+        "accounts": [
+          {
+            "name": "sensor_data",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    109,
+                    97,
+                    99,
+                    104,
+                    105,
+                    110,
+                    101
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "sensor_data.machine_id",
+                  "account": "SensorData"
+                }
+              ]
+            }
+          },
+          {
+            "name": "user",
+            "signer": true
+          }
+        ],
+        "args": []
+      },
+      {
         "name": "undelegate",
         "discriminator": [
           131,
@@ -438,6 +528,21 @@
         "code": 6001,
         "name": "MachineIdTooLong",
         "msg": "Machine ID is too long"
+      },
+      {
+        "code": 6002,
+        "name": "MachineAlreadyOn",
+        "msg": "Machine is already turned on"
+      },
+      {
+        "code": 6003,
+        "name": "MachineAlreadyOff",
+        "msg": "Machine is already turned off"
+      },
+      {
+        "code": 6004,
+        "name": "MachineNotOn",
+        "msg": "Machine must be turned on to perform this action"
       }
     ],
     "types": [
@@ -489,6 +594,10 @@
             {
               "name": "total_readings",
               "type": "u64"
+            },
+            {
+              "name": "is_on",
+              "type": "bool"
             }
           ]
         }

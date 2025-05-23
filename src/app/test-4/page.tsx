@@ -1,9 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useAnchorWallet } from '@solana/wallet-adapter-react';
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { Connection, PublicKey, clusterApiUrl } from '@solana/web3.js';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Connection, PublicKey, clusterApiUrl, Keypair } from '@solana/web3.js';
 import * as anchor from '@coral-xyz/anchor';
 import {
   Card,
@@ -26,6 +24,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import IDL from '@/app/contract-2/idl.json';
+import bs58 from 'bs58';
 
 // Contract address from your IDL
 // const PROGRAM_ID = new PublicKey("CJ2k7Z7dQZDKmNyiBHqK6zBLCRqcyqA5xHcYUohZgVt4");
@@ -70,12 +69,28 @@ interface SensorData {
   totalReadings: number;
 }
 
+// Add this function to create a keypair from private key
+const createKeypairFromPrivateKey = (privateKeyString: string | undefined) => {
+  if (!privateKeyString) return null;
+  try {
+    const decodedKey = bs58.decode(privateKeyString);
+    return Keypair.fromSecretKey(decodedKey);
+  } catch (error) {
+    console.error('Error creating keypair:', error);
+    return null;
+  }
+};
+
 const TestPage = () => {
-  const wallet = useAnchorWallet();
   const [connection] = useState(new Connection(clusterApiUrl('devnet')));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [program, setProgram] = useState<any>(null);
   const [allMachineData, setAllMachineData] = useState<{ [key: string]: SensorData }>({});
+  
+  // Create a keypair from the environment variable
+  const privateKeySigner = useMemo(() => {
+    return createKeypairFromPrivateKey(process.env.NEXT_PUBLIC_PRIVATE_KEY);
+  }, []);
 
   // Forms
   const sensorForm = useForm<z.infer<typeof sensorFormSchema>>({
@@ -96,15 +111,45 @@ const TestPage = () => {
   });
 
   useEffect(() => {
-    if (wallet) {
-      const provider = new anchor.AnchorProvider(connection, wallet, {});
-      const program = new anchor.Program(IDL as anchor.Idl, provider)
+    if (privateKeySigner) {
+      const wallet = {
+        publicKey: privateKeySigner.publicKey,
+        signTransaction: async <T extends anchor.web3.Transaction | anchor.web3.VersionedTransaction>(tx: T): Promise<T> => {
+          if (tx instanceof anchor.web3.VersionedTransaction) {
+            tx.sign([privateKeySigner]);
+          } else {
+            tx.partialSign(privateKeySigner);
+          }
+          return tx;
+        },
+        signAllTransactions: async <T extends anchor.web3.Transaction | anchor.web3.VersionedTransaction>(txs: T[]): Promise<T[]> => {
+          return txs.map((tx) => {
+            if (tx instanceof anchor.web3.VersionedTransaction) {
+              tx.sign([privateKeySigner]);
+            } else {
+              tx.partialSign(privateKeySigner);
+            }
+            return tx;
+          });
+        },
+      };
+
+      const provider = new anchor.AnchorProvider(
+        connection,
+        wallet,
+        { commitment: 'confirmed' }
+      );
+
+      const program = new anchor.Program(
+        IDL as anchor.Idl,
+        provider
+      );
       setProgram(program);
     }
-  }, [wallet, connection]);
+  }, [privateKeySigner, connection]);
 
   const fetchAllMachines = async () => {
-    if (!program || !wallet) return;
+    if (!program || !privateKeySigner) return;
 
     try {
       const accounts = await connection.getProgramAccounts(program.programId);
@@ -142,13 +187,13 @@ const TestPage = () => {
   };
 
   useEffect(() => {
-    if (program && wallet) {
+    if (program && privateKeySigner) {
       fetchAllMachines();
     }
-  }, [program, wallet]);
+  }, [program, privateKeySigner]);
 
   const initializeSensorData = async (machineId: string) => {
-    if (!program || !wallet) return;
+    if (!program || !privateKeySigner) return;
 
     try {
       const [sensorPDA] = PublicKey.findProgramAddressSync(
@@ -160,7 +205,7 @@ const TestPage = () => {
         .initialize(machineId)
         .accounts({
           sensorData: sensorPDA,
-          user: wallet.publicKey,
+          user: privateKeySigner.publicKey,
           systemProgram: anchor.web3.SystemProgram.programId,
         })
         .rpc();
@@ -172,7 +217,10 @@ const TestPage = () => {
   };
 
   const addSensorData = async (values: z.infer<typeof sensorFormSchema>) => {
-    if (!program || !wallet) return;
+    if (!program || !privateKeySigner) {
+      console.error('Program or signer not available');
+      return;
+    }
 
     try {
       const [sensorPDA] = PublicKey.findProgramAddressSync(
@@ -184,18 +232,23 @@ const TestPage = () => {
         .addData(values.temperature, values.humidity)
         .accounts({
           sensorData: sensorPDA,
-          user: wallet.publicKey,
+          user: privateKeySigner.publicKey,
         })
+        .signers([privateKeySigner])
         .rpc();
 
       console.log("Added sensor data:", values);
+      await fetchAllMachines();
     } catch (error) {
       console.error("Error adding sensor data:", error);
     }
   };
 
   const addImageData = async (values: z.infer<typeof imageFormSchema>) => {
-    if (!program || !wallet) return;
+    if (!program || !privateKeySigner) {
+      console.error('Program or signer not available');
+      return;
+    }
 
     try {
       const [sensorPDA] = PublicKey.findProgramAddressSync(
@@ -207,11 +260,13 @@ const TestPage = () => {
         .addImage(values.imageUri)
         .accounts({
           sensorData: sensorPDA,
-          user: wallet.publicKey,
+          user: privateKeySigner.publicKey,
         })
+        .signers([privateKeySigner])
         .rpc();
 
       console.log("Added image data:", values);
+      await fetchAllMachines();
     } catch (error) {
       console.error("Error adding image data:", error);
     }
@@ -221,10 +276,14 @@ const TestPage = () => {
     <div className="container mx-auto p-4 space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Sensor Data Management</h1>
-        <WalletMultiButton />
+        {privateKeySigner && (
+          <div className="text-sm text-gray-600">
+            Connected with: {privateKeySigner.publicKey.toString()}
+          </div>
+        )}
       </div>
 
-      {wallet ? (
+      {privateKeySigner ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Initialize Sensor Data */}
           <Card>
