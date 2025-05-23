@@ -12,6 +12,13 @@ const TestPage = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [activeTab, setActiveTab] = useState("initialize");
+  const [machineData, setMachineData] = useState<{
+    humidity: number;
+    temperature_c: number;
+    temperature_f: number;
+    timestamp: number;
+  } | null>(null);
+  const [machineImage, setMachineImage] = useState<string | null>(null);
 
   // Get provider and program
   const getProvider = () => {
@@ -235,6 +242,7 @@ const TestPage = () => {
         program.programId
       );
       
+      // First call the Solana program
       const tx = await program.methods
         .startMachine()
         .accounts({
@@ -243,7 +251,24 @@ const TestPage = () => {
         })
         .rpc();
       
+      // Then make API call to physically turn on the machine
+      try {
+        const response = await fetch('http://192.168.1.174:8000/api/control/on', {
+          method: 'GET',
+        });
+        
+        if (!response.ok) {
+          console.warn(`API warning: ${response.status}`);
+        }
+      } catch (apiError) {
+        // Log but don't throw to ensure Solana transaction is still considered successful
+        console.warn('API call to control machine failed:', apiError);
+      }
+      
       setMessage(`Machine started successfully! TX: ${tx}`);
+      
+      // Fetch and display data after turning on
+      fetchMachineData(machineId);
     } catch (error: unknown) {
       console.error("Error starting machine:", error);
       setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -267,6 +292,7 @@ const TestPage = () => {
         program.programId
       );
       
+      // First call the Solana program
       const tx = await program.methods
         .stopMachine()
         .accounts({
@@ -275,9 +301,81 @@ const TestPage = () => {
         })
         .rpc();
       
+      // Then make API call to physically turn off the machine
+      try {
+        const response = await fetch('http://192.168.1.174:8000/api/control/off', {
+          method: 'GET',
+        });
+        
+        if (!response.ok) {
+          console.warn(`API warning: ${response.status}`);
+        }
+      } catch (apiError) {
+        // Log but don't throw to ensure Solana transaction is still considered successful
+        console.warn('API call to control machine failed:', apiError);
+      }
+      
       setMessage(`Machine stopped successfully! TX: ${tx}`);
+      
+      // Clear machine data display when turned off
+      setMachineData(null);
+      setMachineImage(null);
     } catch (error: unknown) {
       console.error("Error stopping machine:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Fetch machine data (sensor data and image)
+  const fetchMachineData = async (machineId: string) => {
+    try {
+      setLoading(true);
+      setMessage(`Fetching data for machine ${machineId}...`);
+      
+      // Fetch sensor data
+      try {
+        const sensorResponse = await fetch('http://192.168.1.174:8000/api/sensor', {
+          method: 'GET',
+          // Add CORS mode to handle cross-origin issues
+          // mode: 'cors',
+        });
+        
+        if (sensorResponse.ok) {
+          const sensorData = await sensorResponse.json();
+          setMachineData(sensorData);
+        } else {
+          console.warn(`Sensor API warning: ${sensorResponse.status}`);
+        }
+      } catch (sensorError) {
+        console.warn('Failed to fetch sensor data:', sensorError);
+        // Continue to try fetching the image even if sensor data fails
+      }
+      
+      // Fetch latest image
+      try {
+        const imageResponse = await fetch('http://192.168.1.174:8000/api/images/latest', {
+          method: 'GET',
+          // Add CORS mode to handle cross-origin issues
+          mode: 'cors',
+        });
+        
+        if (imageResponse.ok) {
+          // Get image URL or blob
+          const imageBlob = await imageResponse.blob();
+          const imageUrl = URL.createObjectURL(imageBlob);
+          setMachineImage(imageUrl);
+        } else {
+          console.warn(`Image API warning: ${imageResponse.status}`);
+        }
+      } catch (imageError) {
+        console.warn('Failed to fetch image:', imageError);
+      }
+      
+      setMessage(`Data fetched successfully for machine ${machineId}`);
+    } catch (error: unknown) {
+      console.error("Error fetching machine data:", error);
       setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setLoading(false);
@@ -498,6 +596,55 @@ const TestPage = () => {
           </button>
         </div>
       </div>
+      
+      {/* Machine data display section */}
+      {machineData && (
+        <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900 mb-3">Machine Data</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Sensor data */}
+            <div className="bg-white p-4 rounded-md shadow-sm">
+              <h4 className="text-md font-medium text-gray-700 mb-2">Sensor Readings</h4>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Temperature:</span>
+                  <span className="font-medium">{machineData.temperature_c}°C / {machineData.temperature_f}°F</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Humidity:</span>
+                  <span className="font-medium">{machineData.humidity}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Timestamp:</span>
+                  <span className="font-medium">{new Date(machineData.timestamp * 1000).toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Machine image */}
+            {machineImage && (
+              <div className="bg-white p-4 rounded-md shadow-sm">
+                <h4 className="text-md font-medium text-gray-700 mb-2">Latest Image</h4>
+                <div className="relative h-40 overflow-hidden rounded-md">
+                  <img 
+                    src={machineImage} 
+                    alt="Machine camera feed" 
+                    className="object-cover w-full h-full"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <button
+            onClick={() => fetchMachineData((document.getElementById('machineId') as HTMLInputElement).value)}
+            className="mt-3 w-full bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+            disabled={loading}
+          >
+            Refresh Data
+          </button>
+        </div>
+      )}
     </div>
   );
 
