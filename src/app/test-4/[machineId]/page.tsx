@@ -26,6 +26,7 @@ import {
   Dialog,
   DialogContent,
   DialogTrigger,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import { DownloadIcon } from "lucide-react";
 import { toast } from 'sonner';
@@ -547,6 +548,9 @@ const MachineDetailPage = () => {
                     </div>
                   </DialogTrigger>
                   <DialogContent className="max-w-3xl">
+                    <DialogTitle>
+                      Sensor Image {index + 1}
+                    </DialogTitle>
                     <img
                       src={image.imageUri}
                       alt={`Sensor image ${index + 1}`}

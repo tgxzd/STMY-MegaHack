@@ -26,17 +26,9 @@ import { useForm } from "react-hook-form";
 import * as z from "zod";
 import IDL from '@/app/contract-2/idl.json';
 
-// Form schema for sensor data
-const sensorFormSchema = z.object({
+// Form schema for initialization
+const initFormSchema = z.object({
   machineId: z.string().min(1, "Machine ID is required"),
-  temperature: z.number().min(-273.15).max(1000),
-  humidity: z.number().min(0).max(100),
-});
-
-// Form schema for image data
-const imageFormSchema = z.object({
-  machineId: z.string().min(1, "Machine ID is required"),
-  imageUri: z.string().url("Must be a valid URL"),
 });
 
 // Add these types
@@ -50,7 +42,6 @@ interface ImageDataType {
   imageUri: string;
   timestamp: anchor.BN;
 }
-
 
 interface SensorData {
   machineId: string;
@@ -73,21 +64,11 @@ const TestPage = () => {
   const [program, setProgram] = useState<anchor.Program | null>(null);
   const [allMachineData, setAllMachineData] = useState<{ [key: string]: SensorData }>({});
   
-  // Forms
-  const sensorForm = useForm<z.infer<typeof sensorFormSchema>>({
-    resolver: zodResolver(sensorFormSchema),
+  // Form
+  const initForm = useForm<z.infer<typeof initFormSchema>>({
+    resolver: zodResolver(initFormSchema),
     defaultValues: {
       machineId: '',
-      temperature: 20,
-      humidity: 50,
-    },
-  });
-
-  const imageForm = useForm<z.infer<typeof imageFormSchema>>({
-    resolver: zodResolver(imageFormSchema),
-    defaultValues: {
-      machineId: '',
-      imageUri: '',
     },
   });
 
@@ -182,60 +163,6 @@ const TestPage = () => {
     }
   };
 
-  const addSensorData = async (values: z.infer<typeof sensorFormSchema>) => {
-    if (!program || !publicKey) {
-      console.error('Program or wallet not available');
-      return;
-    }
-
-    try {
-      const [sensorPDA] = PublicKey.findProgramAddressSync(
-        [Buffer.from("machine"), Buffer.from(values.machineId)],
-        program.programId
-      );
-
-      await program.methods
-        .addData(values.temperature, values.humidity)
-        .accounts({
-          sensorData: sensorPDA,
-          user: publicKey,
-        })
-        .rpc();
-
-      console.log("Added sensor data:", values);
-      await fetchAllMachines();
-    } catch (error) {
-      console.error("Error adding sensor data:", error);
-    }
-  };
-
-  const addImageData = async (values: z.infer<typeof imageFormSchema>) => {
-    if (!program || !publicKey) {
-      console.error('Program or wallet not available');
-      return;
-    }
-
-    try {
-      const [sensorPDA] = PublicKey.findProgramAddressSync(
-        [Buffer.from("machine"), Buffer.from(values.machineId)],
-        program.programId
-      );
-
-      await program.methods
-        .addImage(values.imageUri)
-        .accounts({
-          sensorData: sensorPDA,
-          user: publicKey,
-        })
-        .rpc();
-
-      console.log("Added image data:", values);
-      await fetchAllMachines();
-    } catch (error) {
-      console.error("Error adding image data:", error);
-    }
-  };
-
   return (
     <div className="container mx-auto p-4 space-y-6">
       <div className="flex justify-between items-center">
@@ -248,21 +175,21 @@ const TestPage = () => {
       </div>
 
       {publicKey ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-24">
           {/* Initialize Sensor Data */}
-          <Card>
-            <CardHeader>
+          <Card className="md:col-span-2 max-w-md mx-auto w-full">
+            <CardHeader className="text-center">
               <CardTitle>Initialize Sensor</CardTitle>
               <CardDescription>Create a new sensor data account</CardDescription>
             </CardHeader>
             <CardContent>
-              <Form {...sensorForm}>
-                <form onSubmit={sensorForm.handleSubmit(async (values) => {
+              <Form {...initForm}>
+                <form onSubmit={initForm.handleSubmit(async (values) => {
                   await initializeSensorData(values.machineId);
                   fetchAllMachines(); // Refresh the list after initialization
                 })} className="space-y-4">
                   <FormField
-                    control={sensorForm.control}
+                    control={initForm.control}
                     name="machineId"
                     render={({ field }) => (
                       <FormItem>
@@ -275,117 +202,6 @@ const TestPage = () => {
                     )}
                   />
                   <Button type="submit">Initialize</Button>
-                </form>
-              </Form>
-            </CardContent>
-          </Card>
-
-          {/* Add Sensor Reading */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Add Sensor Reading</CardTitle>
-              <CardDescription>Record new sensor data</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Form {...sensorForm}>
-                <form onSubmit={sensorForm.handleSubmit(async (values) => {
-                  await addSensorData(values);
-                  fetchAllMachines(); // Refresh the list after adding data
-                })} className="space-y-4">
-                  <FormField
-                    control={sensorForm.control}
-                    name="machineId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Machine ID</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={sensorForm.control}
-                    name="temperature"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Temperature (°C)</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            step="0.01" 
-                            onChange={(e) => field.onChange(parseFloat(e.target.value))}
-                            value={field.value}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={sensorForm.control}
-                    name="humidity"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Humidity (%)</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            step="0.01" 
-                            onChange={(e) => field.onChange(parseFloat(e.target.value))}
-                            value={field.value}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button type="submit">Add Reading</Button>
-                </form>
-              </Form>
-            </CardContent>
-          </Card>
-
-          {/* Add Image Data */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Add Image</CardTitle>
-              <CardDescription>Upload a new image URI</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Form {...imageForm}>
-                <form onSubmit={imageForm.handleSubmit(async (values) => {
-                  await addImageData(values);
-                  fetchAllMachines(); // Refresh the list after adding image
-                })} className="space-y-4">
-                  <FormField
-                    control={imageForm.control}
-                    name="machineId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Machine ID</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={imageForm.control}
-                    name="imageUri"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Image URI</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button type="submit">Add Image</Button>
                 </form>
               </Form>
             </CardContent>
