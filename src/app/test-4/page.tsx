@@ -39,6 +39,7 @@ const sensorFormSchema = z.object({
 
 // Form schema for image data
 const imageFormSchema = z.object({
+  machineId: z.string().min(1, "Machine ID is required"),
   imageUri: z.string().url("Must be a valid URL"),
 });
 
@@ -54,12 +55,6 @@ interface ImageDataType {
   timestamp: anchor.BN;
 }
 
-interface SensorDataAccount {
-  readings: SensorReading[];
-  imageData: ImageDataType[];
-  machineId: string;
-  totalReadings: anchor.BN;
-}
 
 interface SensorData {
   machineId: string;
@@ -80,8 +75,7 @@ const TestPage = () => {
   const [connection] = useState(new Connection(clusterApiUrl('devnet')));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [program, setProgram] = useState<any>(null);
-  const [sensorData, setSensorData] = useState<SensorData | null>(null);
-  const [machineIdToFetch, setMachineIdToFetch] = useState('');
+  const [allMachineData, setAllMachineData] = useState<{ [key: string]: SensorData }>({});
 
   // Forms
   const sensorForm = useForm<z.infer<typeof sensorFormSchema>>({
@@ -96,6 +90,7 @@ const TestPage = () => {
   const imageForm = useForm<z.infer<typeof imageFormSchema>>({
     resolver: zodResolver(imageFormSchema),
     defaultValues: {
+      machineId: '',
       imageUri: '',
     },
   });
@@ -107,6 +102,50 @@ const TestPage = () => {
       setProgram(program);
     }
   }, [wallet, connection]);
+
+  const fetchAllMachines = async () => {
+    if (!program || !wallet) return;
+
+    try {
+      const accounts = await connection.getProgramAccounts(program.programId);
+      const machinesData: { [key: string]: SensorData } = {};
+
+      for (const { account } of accounts) {
+        try {
+          const accountData = program.coder.accounts.decode(
+            'sensorData',
+            account.data
+          );
+
+          machinesData[accountData.machineId] = {
+            machineId: accountData.machineId,
+            readings: accountData.readings.map((r: SensorReading) => ({
+              temperatureC: r.temperatureC,
+              humidity: r.humidity,
+              timestamp: r.timestamp.toNumber(),
+            })),
+            imageData: accountData.imageData.map((img: ImageDataType) => ({
+              imageUri: img.imageUri,
+              timestamp: img.timestamp.toNumber(),
+            })),
+            totalReadings: accountData.totalReadings.toNumber(),
+          };
+        } catch (error) {
+          console.error("Error decoding account:", error);
+        }
+      }
+
+      setAllMachineData(machinesData);
+    } catch (error) {
+      console.error("Error fetching machines:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (program && wallet) {
+      fetchAllMachines();
+    }
+  }, [program, wallet]);
 
   const initializeSensorData = async (machineId: string) => {
     if (!program || !wallet) return;
@@ -156,11 +195,11 @@ const TestPage = () => {
   };
 
   const addImageData = async (values: z.infer<typeof imageFormSchema>) => {
-    if (!program || !wallet || !sensorData) return;
+    if (!program || !wallet) return;
 
     try {
       const [sensorPDA] = PublicKey.findProgramAddressSync(
-        [Buffer.from("machine"), Buffer.from(sensorData.machineId)],
+        [Buffer.from("machine"), Buffer.from(values.machineId)],
         program.programId
       );
 
@@ -175,35 +214,6 @@ const TestPage = () => {
       console.log("Added image data:", values);
     } catch (error) {
       console.error("Error adding image data:", error);
-    }
-  };
-
-  const fetchSensorData = async (machineId: string) => {
-    if (!program || !wallet) return;
-
-    try {
-      const [sensorPDA] = PublicKey.findProgramAddressSync(
-        [Buffer.from("machine"), Buffer.from(machineId)],
-        program.programId
-      );
-
-      const account = await program.account.sensorData.fetch(sensorPDA) as SensorDataAccount;
-      setSensorData({
-        machineId: account.machineId,
-        readings: account.readings.map((r: SensorReading) => ({
-          temperatureC: r.temperatureC,
-          humidity: r.humidity,
-          timestamp: r.timestamp.toNumber(),
-        })),
-        imageData: account.imageData.map((img: ImageDataType) => ({
-          imageUri: img.imageUri,
-          timestamp: img.timestamp.toNumber(),
-        })),
-        totalReadings: account.totalReadings.toNumber(),
-      });
-    } catch (error) {
-      console.error("Error fetching sensor data:", error);
-      setSensorData(null);
     }
   };
 
@@ -226,6 +236,7 @@ const TestPage = () => {
               <Form {...sensorForm}>
                 <form onSubmit={sensorForm.handleSubmit(async (values) => {
                   await initializeSensorData(values.machineId);
+                  fetchAllMachines(); // Refresh the list after initialization
                 })} className="space-y-4">
                   <FormField
                     control={sensorForm.control}
@@ -254,7 +265,10 @@ const TestPage = () => {
             </CardHeader>
             <CardContent>
               <Form {...sensorForm}>
-                <form onSubmit={sensorForm.handleSubmit(addSensorData)} className="space-y-4">
+                <form onSubmit={sensorForm.handleSubmit(async (values) => {
+                  await addSensorData(values);
+                  fetchAllMachines(); // Refresh the list after adding data
+                })} className="space-y-4">
                   <FormField
                     control={sensorForm.control}
                     name="machineId"
@@ -318,7 +332,23 @@ const TestPage = () => {
             </CardHeader>
             <CardContent>
               <Form {...imageForm}>
-                <form onSubmit={imageForm.handleSubmit(addImageData)} className="space-y-4">
+                <form onSubmit={imageForm.handleSubmit(async (values) => {
+                  await addImageData(values);
+                  fetchAllMachines(); // Refresh the list after adding image
+                })} className="space-y-4">
+                  <FormField
+                    control={imageForm.control}
+                    name="machineId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Machine ID</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <FormField
                     control={imageForm.control}
                     name="imageUri"
@@ -338,37 +368,25 @@ const TestPage = () => {
             </CardContent>
           </Card>
 
-          {/* Add this new card for fetching and displaying data */}
+          {/* Display all machines */}
           <Card className="md:col-span-2">
             <CardHeader>
-              <CardTitle>View Sensor Data</CardTitle>
-              <CardDescription>View readings and images for a specific machine</CardDescription>
+              <CardTitle>All Machines</CardTitle>
+              <CardDescription>View all machine data</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="flex gap-4">
-                  <Input
-                    placeholder="Enter Machine ID"
-                    value={machineIdToFetch}
-                    onChange={(e) => setMachineIdToFetch(e.target.value)}
-                  />
-                  <Button onClick={() => fetchSensorData(machineIdToFetch)}>
-                    Fetch Data
-                  </Button>
-                </div>
-
-                {sensorData && (
-                  <div className="space-y-6">
+              <div className="space-y-6">
+                {Object.entries(allMachineData).map(([machineId, data]) => (
+                  <div key={machineId} className="border rounded-lg p-4 space-y-4">
                     <div>
-                      <h3 className="text-lg font-semibold mb-2">Machine Details</h3>
-                      <p>Machine ID: {sensorData.machineId}</p>
-                      <p>Total Readings: {sensorData.totalReadings}</p>
+                      <h3 className="text-lg font-semibold mb-2">Machine {machineId}</h3>
+                      <p>Total Readings: {data.totalReadings}</p>
                     </div>
 
                     <div>
-                      <h3 className="text-lg font-semibold mb-2">Sensor Readings</h3>
+                      <h4 className="text-md font-semibold mb-2">Sensor Readings</h4>
                       <div className="grid gap-2">
-                        {sensorData.readings.map((reading, index) => (
+                        {data.readings.map((reading, index) => (
                           <div key={index} className="bg-secondary p-3 rounded-lg">
                             <p>Temperature: {reading.temperatureC}°C</p>
                             <p>Humidity: {reading.humidity}%</p>
@@ -379,9 +397,9 @@ const TestPage = () => {
                     </div>
 
                     <div>
-                      <h3 className="text-lg font-semibold mb-2">Images</h3>
+                      <h4 className="text-md font-semibold mb-2">Images</h4>
                       <div className="grid gap-4 grid-cols-2">
-                        {sensorData.imageData.map((image, index) => (
+                        {data.imageData.map((image, index) => (
                           <div key={index} className="space-y-2">
                             <img
                               src={image.imageUri}
@@ -396,7 +414,7 @@ const TestPage = () => {
                       </div>
                     </div>
                   </div>
-                )}
+                ))}
               </div>
             </CardContent>
           </Card>
