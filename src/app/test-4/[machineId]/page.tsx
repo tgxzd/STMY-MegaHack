@@ -70,6 +70,7 @@ const MachineDetailPage = () => {
     turnOff: false
   });
   const [dataFetchInterval, setDataFetchInterval] = useState<NodeJS.Timeout | null>(null);
+  const [imageFetchInterval, setImageFetchInterval] = useState<NodeJS.Timeout | null>(null);
 
   // Initialize programs - one with wallet for turn on/off, one with private key for sensor data
   useEffect(() => {
@@ -192,10 +193,53 @@ const MachineDetailPage = () => {
     }
   };
 
+  const fetchAndAddImageData = async () => {
+    if (!sensorProgram || !machineData?.isOn) {
+      return;
+    }
+
+    try {
+      // Fetch image data from API
+      const response = await fetch('https://machine.hrzhkm.xyz/api/manual-upload/get');
+      const imageData = await response.json();
+
+      if (!imageData.success || !imageData.shortUrl) {
+        throw new Error('Failed to get valid image data');
+      }
+
+      const [sensorPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        sensorProgram.programId
+      );
+
+      const userPublicKey = sensorProgram.provider.publicKey;
+      if (!userPublicKey) {
+        throw new Error('Provider public key not available');
+      }
+
+      await sensorProgram.methods
+        .addImage(imageData.shortUrl)
+        .accounts({
+          sensorData: sensorPDA,
+          user: userPublicKey,
+        })
+        .rpc();
+
+      await fetchMachineData();
+      console.log("Added image data:", { imageUrl: imageData.shortUrl });
+    } catch (error) {
+      console.error("Error adding image data:", error);
+      toast('Failed to add image data', {
+        dismissible: true,
+        duration: 2000
+      });
+    }
+  };
+
   // Start/stop data fetching based on machine state
   useEffect(() => {
     if (machineData?.isOn && !dataFetchInterval) {
-      // Start fetching data every 10 seconds
+      // Start fetching sensor data every 10 seconds
       const interval = setInterval(fetchAndAddSensorData, 10000);
       setDataFetchInterval(interval);
       // Fetch immediately when turned on
@@ -210,6 +254,36 @@ const MachineDetailPage = () => {
     return () => {
       if (dataFetchInterval) {
         clearInterval(dataFetchInterval);
+      }
+    };
+  }, [machineData?.isOn, sensorProgram]);
+
+  // Handle image uploads with 10-second initial delay and 10-minute intervals
+  useEffect(() => {
+    if (machineData?.isOn && !imageFetchInterval) {
+      // First image upload after 10 seconds
+      const initialTimeout = setTimeout(() => {
+        fetchAndAddImageData();
+        
+        // Then start the 10-minute interval
+        const interval = setInterval(fetchAndAddImageData, 600000); // 10 minutes in milliseconds
+        setImageFetchInterval(interval);
+      }, 10000); // 10 seconds initial delay
+
+      // Cleanup function for the initial timeout
+      return () => {
+        clearTimeout(initialTimeout);
+      };
+    } else if (!machineData?.isOn && imageFetchInterval) {
+      // Stop fetching when machine is turned off
+      clearInterval(imageFetchInterval);
+      setImageFetchInterval(null);
+    }
+
+    // Cleanup interval on unmount or when machine is turned off
+    return () => {
+      if (imageFetchInterval) {
+        clearInterval(imageFetchInterval);
       }
     };
   }, [machineData?.isOn, sensorProgram]);
