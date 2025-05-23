@@ -67,6 +67,7 @@ const MachineDetailPage = () => {
     turnOn: false,
     turnOff: false
   });
+  const [dataFetchInterval, setDataFetchInterval] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (publicKey && signTransaction && signAllTransactions) {
@@ -131,6 +132,62 @@ const MachineDetailPage = () => {
       fetchMachineData();
     }
   }, [program, publicKey, machineId]);
+
+  const fetchAndAddSensorData = async () => {
+    if (!program || !publicKey || !machineData?.isOn) {
+      return;
+    }
+
+    try {
+      // Fetch sensor data from API
+      const response = await fetch('https://machine.hrzhkm.xyz/api/sensor');
+      const sensorData = await response.json();
+
+      const [sensorPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        program.programId
+      );
+
+      await program.methods
+        .addData(sensorData.temperature_c, sensorData.humidity)
+        .accounts({
+          sensorData: sensorPDA,
+          user: publicKey,
+        })
+        .rpc();
+
+      await fetchMachineData();
+      console.log("Added sensor data:", { temperature: sensorData.temperature_c, humidity: sensorData.humidity });
+    } catch (error) {
+      console.error("Error adding sensor data:", error);
+      toast('Failed to add sensor data', {
+        dismissible: true,
+        duration: 2000
+      });
+    }
+  };
+
+  // Start/stop data fetching based on machine state
+  useEffect(() => {
+    if (machineData?.isOn && !dataFetchInterval) {
+      // Start fetching data every 10 seconds
+      const interval = setInterval(fetchAndAddSensorData, 10000);
+      setDataFetchInterval(interval);
+      // Fetch immediately when turned on
+      fetchAndAddSensorData();
+    } else if (!machineData?.isOn && dataFetchInterval) {
+      // Stop fetching when machine is turned off
+      clearInterval(dataFetchInterval);
+      setDataFetchInterval(null);
+    }
+
+    // Cleanup interval on unmount or when machine is turned off
+    return () => {
+      if (dataFetchInterval) {
+        clearInterval(dataFetchInterval);
+      }
+    };
+  }, [machineData?.isOn, program, publicKey]);
 
   const turnOnMachine = async () => {
     if (!program || !publicKey) return;
@@ -284,15 +341,6 @@ const MachineDetailPage = () => {
 
   return (
     <div className="container mx-auto p-4 space-y-6 mt-24">
-      {/* <Toaster 
-        position="top-right" 
-        expand={true} 
-        richColors 
-        closeButton
-        toastOptions={{
-          style: { background: 'white' }
-        }}
-      /> */}
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
