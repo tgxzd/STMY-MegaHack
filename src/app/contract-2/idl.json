@@ -1,0 +1,626 @@
+{
+    "address": "CJ2k7Z7dQZDKmNyiBHqK6zBLCRqcyqA5xHcYUohZgVt4",
+    "metadata": {
+      "name": "contract_7",
+      "version": "0.1.0",
+      "spec": "0.1.0",
+      "description": "Created with Anchor"
+    },
+    "instructions": [
+      {
+        "name": "add_data",
+        "discriminator": [
+          66,
+          2,
+          181,
+          51,
+          232,
+          212,
+          234,
+          221
+        ],
+        "accounts": [
+          {
+            "name": "sensor_data",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    109,
+                    97,
+                    99,
+                    104,
+                    105,
+                    110,
+                    101
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "sensor_data.machine_id",
+                  "account": "SensorData"
+                }
+              ]
+            }
+          },
+          {
+            "name": "user",
+            "signer": true
+          }
+        ],
+        "args": [
+          {
+            "name": "temperature_c",
+            "type": "f32"
+          },
+          {
+            "name": "humidity",
+            "type": "f32"
+          }
+        ]
+      },
+      {
+        "name": "add_image",
+        "discriminator": [
+          233,
+          140,
+          100,
+          77,
+          228,
+          231,
+          244,
+          56
+        ],
+        "accounts": [
+          {
+            "name": "sensor_data",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    109,
+                    97,
+                    99,
+                    104,
+                    105,
+                    110,
+                    101
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "sensor_data.machine_id",
+                  "account": "SensorData"
+                }
+              ]
+            }
+          },
+          {
+            "name": "user",
+            "signer": true
+          }
+        ],
+        "args": [
+          {
+            "name": "image_uri",
+            "type": "string"
+          }
+        ]
+      },
+      {
+        "name": "delegate",
+        "docs": [
+          "Delegate the account to the delegation program"
+        ],
+        "discriminator": [
+          90,
+          147,
+          75,
+          178,
+          85,
+          88,
+          4,
+          137
+        ],
+        "accounts": [
+          {
+            "name": "payer",
+            "signer": true
+          },
+          {
+            "name": "buffer_pda",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    98,
+                    117,
+                    102,
+                    102,
+                    101,
+                    114
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "pda"
+                }
+              ],
+              "program": {
+                "kind": "const",
+                "value": [
+                  167,
+                  205,
+                  102,
+                  176,
+                  130,
+                  169,
+                  252,
+                  254,
+                  196,
+                  177,
+                  170,
+                  162,
+                  81,
+                  170,
+                  61,
+                  239,
+                  86,
+                  104,
+                  106,
+                  27,
+                  23,
+                  176,
+                  141,
+                  254,
+                  15,
+                  66,
+                  245,
+                  238,
+                  66,
+                  184,
+                  90,
+                  153
+                ]
+              }
+            }
+          },
+          {
+            "name": "delegation_record_pda",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    100,
+                    101,
+                    108,
+                    101,
+                    103,
+                    97,
+                    116,
+                    105,
+                    111,
+                    110
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "pda"
+                }
+              ],
+              "program": {
+                "kind": "account",
+                "path": "delegation_program"
+              }
+            }
+          },
+          {
+            "name": "delegation_metadata_pda",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    100,
+                    101,
+                    108,
+                    101,
+                    103,
+                    97,
+                    116,
+                    105,
+                    111,
+                    110,
+                    45,
+                    109,
+                    101,
+                    116,
+                    97,
+                    100,
+                    97,
+                    116,
+                    97
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "pda"
+                }
+              ],
+              "program": {
+                "kind": "account",
+                "path": "delegation_program"
+              }
+            }
+          },
+          {
+            "name": "pda",
+            "docs": [
+              "CHECK The pda to delegate"
+            ],
+            "writable": true
+          },
+          {
+            "name": "sensor_data"
+          },
+          {
+            "name": "owner_program",
+            "address": "CJ2k7Z7dQZDKmNyiBHqK6zBLCRqcyqA5xHcYUohZgVt4"
+          },
+          {
+            "name": "delegation_program",
+            "address": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
+          },
+          {
+            "name": "system_program",
+            "address": "11111111111111111111111111111111"
+          }
+        ],
+        "args": []
+      },
+      {
+        "name": "initialize",
+        "discriminator": [
+          175,
+          175,
+          109,
+          31,
+          13,
+          152,
+          155,
+          237
+        ],
+        "accounts": [
+          {
+            "name": "sensor_data",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    109,
+                    97,
+                    99,
+                    104,
+                    105,
+                    110,
+                    101
+                  ]
+                },
+                {
+                  "kind": "arg",
+                  "path": "machine_id"
+                }
+              ]
+            }
+          },
+          {
+            "name": "user",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "system_program",
+            "address": "11111111111111111111111111111111"
+          }
+        ],
+        "args": [
+          {
+            "name": "machine_id",
+            "type": "string"
+          }
+        ]
+      },
+      {
+        "name": "process_undelegation",
+        "discriminator": [
+          196,
+          28,
+          41,
+          206,
+          48,
+          37,
+          51,
+          167
+        ],
+        "accounts": [
+          {
+            "name": "base_account",
+            "writable": true
+          },
+          {
+            "name": "buffer"
+          },
+          {
+            "name": "payer",
+            "writable": true
+          },
+          {
+            "name": "system_program"
+          }
+        ],
+        "args": [
+          {
+            "name": "account_seeds",
+            "type": {
+              "vec": "bytes"
+            }
+          }
+        ]
+      },
+      {
+        "name": "turn_off",
+        "discriminator": [
+          173,
+          8,
+          5,
+          68,
+          8,
+          117,
+          115,
+          68
+        ],
+        "accounts": [
+          {
+            "name": "sensor_data",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    109,
+                    97,
+                    99,
+                    104,
+                    105,
+                    110,
+                    101
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "sensor_data.machine_id",
+                  "account": "SensorData"
+                }
+              ]
+            }
+          },
+          {
+            "name": "user",
+            "signer": true
+          }
+        ],
+        "args": []
+      },
+      {
+        "name": "turn_on",
+        "discriminator": [
+          231,
+          164,
+          251,
+          197,
+          185,
+          52,
+          153,
+          128
+        ],
+        "accounts": [
+          {
+            "name": "sensor_data",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    109,
+                    97,
+                    99,
+                    104,
+                    105,
+                    110,
+                    101
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "sensor_data.machine_id",
+                  "account": "SensorData"
+                }
+              ]
+            }
+          },
+          {
+            "name": "user",
+            "signer": true
+          }
+        ],
+        "args": []
+      },
+      {
+        "name": "undelegate",
+        "discriminator": [
+          131,
+          148,
+          180,
+          198,
+          91,
+          104,
+          42,
+          238
+        ],
+        "accounts": [
+          {
+            "name": "payer",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "pda",
+            "writable": true
+          },
+          {
+            "name": "magic_program",
+            "address": "Magic11111111111111111111111111111111111111"
+          },
+          {
+            "name": "magic_context",
+            "writable": true,
+            "address": "MagicContext1111111111111111111111111111111"
+          }
+        ],
+        "args": []
+      }
+    ],
+    "accounts": [
+      {
+        "name": "SensorData",
+        "discriminator": [
+          227,
+          214,
+          115,
+          84,
+          218,
+          201,
+          43,
+          192
+        ]
+      }
+    ],
+    "errors": [
+      {
+        "code": 6000,
+        "name": "UriTooLong",
+        "msg": "Image URI is too long"
+      },
+      {
+        "code": 6001,
+        "name": "MachineIdTooLong",
+        "msg": "Machine ID is too long"
+      },
+      {
+        "code": 6002,
+        "name": "MachineAlreadyOn",
+        "msg": "Machine is already turned on"
+      },
+      {
+        "code": 6003,
+        "name": "MachineAlreadyOff",
+        "msg": "Machine is already turned off"
+      },
+      {
+        "code": 6004,
+        "name": "MachineNotOn",
+        "msg": "Machine must be turned on to perform this action"
+      }
+    ],
+    "types": [
+      {
+        "name": "ImageData",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "image_uri",
+              "type": "string"
+            },
+            {
+              "name": "timestamp",
+              "type": "i64"
+            }
+          ]
+        }
+      },
+      {
+        "name": "SensorData",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "readings",
+              "type": {
+                "vec": {
+                  "defined": {
+                    "name": "SensorReading"
+                  }
+                }
+              }
+            },
+            {
+              "name": "image_data",
+              "type": {
+                "vec": {
+                  "defined": {
+                    "name": "ImageData"
+                  }
+                }
+              }
+            },
+            {
+              "name": "machine_id",
+              "type": "string"
+            },
+            {
+              "name": "total_readings",
+              "type": "u64"
+            },
+            {
+              "name": "is_on",
+              "type": "bool"
+            }
+          ]
+        }
+      },
+      {
+        "name": "SensorReading",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "temperature_c",
+              "type": "f32"
+            },
+            {
+              "name": "humidity",
+              "type": "f32"
+            },
+            {
+              "name": "timestamp",
+              "type": "i64"
+            }
+          ]
+        }
+      }
+    ]
+  }

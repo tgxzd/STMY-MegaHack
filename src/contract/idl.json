@@ -1,571 +1,686 @@
 {
-    "address": "3cSyEVxE9yXDYiWa6cDo5cZZr8hFE567ZBBCTZHTdsHn",
-    "metadata": {
-      "name": "agrox_contract",
-      "version": "0.1.0",
-      "spec": "0.1.0",
-      "description": "Created with Anchor"
+  "address": "4oweKJAgekQk5WoixX6Uagk8SNTbpPZb6QhmYd9Vv6nW",
+  "metadata": {
+    "name": "agrox_contract",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "claim_rewards",
+      "discriminator": [
+        4,
+        144,
+        132,
+        71,
+        116,
+        23,
+        151,
+        80
+      ],
+      "accounts": [
+        {
+          "name": "machine",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "signer": true
+        }
+      ],
+      "args": []
     },
-    "instructions": [
-      {
-        "name": "claim_rewards",
-        "discriminator": [
-          4,
-          144,
-          132,
-          71,
-          116,
-          23,
-          151,
-          80
-        ],
-        "accounts": [
-          {
-            "name": "machine",
-            "writable": true
-          },
-          {
-            "name": "user",
-            "signer": true
-          }
-        ],
-        "args": []
-      },
-      {
-        "name": "create_plant",
-        "discriminator": [
-          54,
-          36,
-          254,
-          203,
-          1,
-          141,
-          112,
-          190
-        ],
-        "accounts": [
-          {
-            "name": "system_state",
-            "writable": true
-          },
-          {
-            "name": "plant",
-            "writable": true,
-            "signer": true
-          },
-          {
-            "name": "user",
-            "writable": true,
-            "signer": true
-          },
-          {
-            "name": "system_program",
-            "address": "11111111111111111111111111111111"
-          }
-        ],
-        "args": [
-          {
-            "name": "plant_name",
-            "type": "string"
-          }
-        ]
-      },
-      {
-        "name": "delegate",
-        "docs": [
-          "Delegate the account to the delegation program"
-        ],
-        "discriminator": [
-          90,
-          147,
-          75,
-          178,
-          85,
-          88,
-          4,
-          137
-        ],
-        "accounts": [
-          {
-            "name": "payer",
-            "signer": true
-          },
-          {
-            "name": "buffer_pda",
-            "writable": true,
-            "pda": {
-              "seeds": [
-                {
-                  "kind": "const",
-                  "value": [
-                    98,
-                    117,
-                    102,
-                    102,
-                    101,
-                    114
-                  ]
-                },
-                {
-                  "kind": "account",
-                  "path": "pda"
-                }
-              ],
-              "program": {
+    {
+      "name": "create_plant",
+      "discriminator": [
+        54,
+        36,
+        254,
+        203,
+        1,
+        141,
+        112,
+        190
+      ],
+      "accounts": [
+        {
+          "name": "cluster",
+          "writable": true
+        },
+        {
+          "name": "plant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
                 "kind": "const",
                 "value": [
-                  38,
-                  204,
-                  16,
-                  230,
-                  34,
-                  229,
-                  223,
-                  202,
-                  30,
-                  1,
-                  175,
-                  136,
-                  36,
-                  245,
-                  227,
-                  32,
-                  204,
-                  124,
-                  168,
-                  16,
-                  75,
-                  205,
-                  209,
-                  21,
-                  5,
-                  81,
-                  6,
-                  253,
-                  76,
-                  133,
-                  224,
-                  21
+                  112,
+                  108,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "plant_name"
+              }
+            ]
+          }
+        },
+        {
+          "name": "machine",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "plant_name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "delegate",
+      "docs": [
+        "Delegate the account to the delegation program"
+      ],
+      "discriminator": [
+        90,
+        147,
+        75,
+        178,
+        85,
+        88,
+        4,
+        137
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "signer": true
+        },
+        {
+          "name": "buffer_pda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  102,
+                  102,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pda"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                56,
+                153,
+                144,
+                62,
+                95,
+                5,
+                162,
+                244,
+                127,
+                68,
+                213,
+                47,
+                238,
+                243,
+                85,
+                253,
+                209,
+                56,
+                22,
+                10,
+                190,
+                179,
+                206,
+                102,
+                246,
+                43,
+                128,
+                125,
+                209,
+                240,
+                23,
+                139
+              ]
+            }
+          }
+        },
+        {
+          "name": "delegation_record_pda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pda"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegation_program"
+            }
+          }
+        },
+        {
+          "name": "delegation_metadata_pda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  109,
+                  101,
+                  116,
+                  97,
+                  100,
+                  97,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pda"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegation_program"
+            }
+          }
+        },
+        {
+          "name": "pda",
+          "docs": [
+            "CHECK The pda to delegate"
+          ],
+          "writable": true
+        },
+        {
+          "name": "owner_program",
+          "address": "4oweKJAgekQk5WoixX6Uagk8SNTbpPZb6QhmYd9Vv6nW"
+        },
+        {
+          "name": "delegation_program",
+          "address": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize",
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "cluster",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  108,
+                  117,
+                  115,
+                  116,
+                  101,
+                  114
                 ]
               }
-            }
-          },
-          {
-            "name": "delegation_record_pda",
-            "writable": true,
-            "pda": {
-              "seeds": [
-                {
-                  "kind": "const",
-                  "value": [
-                    100,
-                    101,
-                    108,
-                    101,
-                    103,
-                    97,
-                    116,
-                    105,
-                    111,
-                    110
-                  ]
-                },
-                {
-                  "kind": "account",
-                  "path": "pda"
-                }
-              ],
-              "program": {
-                "kind": "account",
-                "path": "delegation_program"
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "process_undelegation",
+      "discriminator": [
+        196,
+        28,
+        41,
+        206,
+        48,
+        37,
+        51,
+        167
+      ],
+      "accounts": [
+        {
+          "name": "base_account",
+          "writable": true
+        },
+        {
+          "name": "buffer"
+        },
+        {
+          "name": "payer",
+          "writable": true
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "account_seeds",
+          "type": {
+            "vec": "bytes"
+          }
+        }
+      ]
+    },
+    {
+      "name": "register_machine",
+      "discriminator": [
+        168,
+        160,
+        68,
+        209,
+        28,
+        151,
+        41,
+        17
+      ],
+      "accounts": [
+        {
+          "name": "cluster",
+          "writable": true
+        },
+        {
+          "name": "machine",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  99,
+                  104,
+                  105,
+                  110,
+                  101
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "machine_id"
               }
-            }
-          },
-          {
-            "name": "delegation_metadata_pda",
-            "writable": true,
-            "pda": {
-              "seeds": [
-                {
-                  "kind": "const",
-                  "value": [
-                    100,
-                    101,
-                    108,
-                    101,
-                    103,
-                    97,
-                    116,
-                    105,
-                    111,
-                    110,
-                    45,
-                    109,
-                    101,
-                    116,
-                    97,
-                    100,
-                    97,
-                    116,
-                    97
-                  ]
-                },
-                {
-                  "kind": "account",
-                  "path": "pda"
-                }
-              ],
-              "program": {
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "machine_id",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "start_machine",
+      "discriminator": [
+        121,
+        244,
+        42,
+        69,
+        36,
+        146,
+        206,
+        127
+      ],
+      "accounts": [
+        {
+          "name": "machine",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "stop_machine",
+      "discriminator": [
+        191,
+        189,
+        244,
+        250,
+        83,
+        220,
+        186,
+        32
+      ],
+      "accounts": [
+        {
+          "name": "machine",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "undelegate",
+      "docs": [
+        "Undelegate the account from the delegation program"
+      ],
+      "discriminator": [
+        131,
+        148,
+        180,
+        198,
+        91,
+        104,
+        42,
+        238
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "pda",
+          "writable": true
+        },
+        {
+          "name": "magic_program",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magic_context",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "upload_data",
+      "discriminator": [
+        71,
+        186,
+        8,
+        42,
+        188,
+        75,
+        135,
+        230
+      ],
+      "accounts": [
+        {
+          "name": "cluster",
+          "writable": true
+        },
+        {
+          "name": "machine",
+          "writable": true
+        },
+        {
+          "name": "plant",
+          "writable": true
+        },
+        {
+          "name": "data",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  97,
+                  116,
+                  97
+                ]
+              },
+              {
                 "kind": "account",
-                "path": "delegation_program"
+                "path": "machine.machine_id",
+                "account": "Machine"
+              },
+              {
+                "kind": "account",
+                "path": "plant.plant_name",
+                "account": "PlantData"
               }
-            }
-          },
-          {
-            "name": "pda",
-            "docs": [
-              "CHECK The pda to delegate"
-            ],
-            "writable": true
-          },
-          {
-            "name": "owner_program",
-            "address": "3cSyEVxE9yXDYiWa6cDo5cZZr8hFE567ZBBCTZHTdsHn"
-          },
-          {
-            "name": "delegation_program",
-            "address": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
-          },
-          {
-            "name": "system_program",
-            "address": "11111111111111111111111111111111"
+            ]
           }
-        ],
-        "args": []
-      },
-      {
-        "name": "generate_machine_auth",
-        "discriminator": [
-          183,
-          47,
-          188,
-          200,
-          72,
-          242,
-          37,
-          9
-        ],
-        "accounts": [
-          {
-            "name": "machine",
-            "writable": true
-          },
-          {
-            "name": "user",
-            "signer": true
-          },
-          {
-            "name": "auth_pda",
-            "pda": {
-              "seeds": [
-                {
-                  "kind": "const",
-                  "value": [
-                    109,
-                    97,
-                    99,
-                    104,
-                    105,
-                    110,
-                    101,
-                    45,
-                    97,
-                    117,
-                    116,
-                    104
-                  ]
-                },
-                {
-                  "kind": "account",
-                  "path": "machine.machine_id",
-                  "account": "Machine"
-                }
-              ]
-            }
-          },
-          {
-            "name": "system_program",
-            "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "temperature",
+          "type": "f64"
+        },
+        {
+          "name": "humidity",
+          "type": "f64"
+        },
+        {
+          "name": "image_url",
+          "type": {
+            "option": "string"
           }
-        ],
-        "args": [
+        }
+      ]
+    },
+    {
+      "name": "use_data",
+      "discriminator": [
+        245,
+        181,
+        226,
+        28,
+        125,
+        41,
+        221,
+        84
+      ],
+      "accounts": [
+        {
+          "name": "cluster",
+          "writable": true
+        },
+        {
+          "name": "machine",
+          "writable": true
+        },
+        {
+          "name": "data",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "entry_index",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "IoTData",
+      "discriminator": [
+        254,
+        141,
+        112,
+        46,
+        177,
+        47,
+        45,
+        83
+      ]
+    },
+    {
+      "name": "PlantData",
+      "discriminator": [
+        168,
+        139,
+        111,
+        70,
+        1,
+        222,
+        84,
+        115
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "MachineIdAlreadyExists",
+      "msg": "Machine ID already exists"
+    },
+    {
+      "code": 6001,
+      "name": "Unauthorized",
+      "msg": "Unauthorized operation"
+    },
+    {
+      "code": 6002,
+      "name": "MachineNotActive",
+      "msg": "Machine is not active"
+    },
+    {
+      "code": 6003,
+      "name": "NoRewardsAvailable",
+      "msg": "No rewards available to claim"
+    },
+    {
+      "code": 6004,
+      "name": "UnregisteredPlant",
+      "msg": "Unregistered plant"
+    },
+    {
+      "code": 6005,
+      "name": "InvalidDataEntryIndex",
+      "msg": "Invalid data entry index"
+    },
+    {
+      "code": 6006,
+      "name": "PlantNotLinkedToMachine",
+      "msg": "Plant not linked to the specified machine"
+    }
+  ],
+  "types": [
+    {
+      "name": "DataEntry",
+      "type": {
+        "kind": "struct",
+        "fields": [
           {
-            "name": "machine_id",
-            "type": "string"
-          }
-        ]
-      },
-      {
-        "name": "initialize",
-        "discriminator": [
-          175,
-          175,
-          109,
-          31,
-          13,
-          152,
-          155,
-          237
-        ],
-        "accounts": [
-          {
-            "name": "system_state",
-            "writable": true,
-            "signer": true
+            "name": "timestamp",
+            "type": "i64"
           },
-          {
-            "name": "authority",
-            "writable": true,
-            "signer": true
-          },
-          {
-            "name": "system_program",
-            "address": "11111111111111111111111111111111"
-          }
-        ],
-        "args": []
-      },
-      {
-        "name": "process_undelegation",
-        "discriminator": [
-          196,
-          28,
-          41,
-          206,
-          48,
-          37,
-          51,
-          167
-        ],
-        "accounts": [
-          {
-            "name": "base_account",
-            "writable": true
-          },
-          {
-            "name": "buffer"
-          },
-          {
-            "name": "payer",
-            "writable": true
-          },
-          {
-            "name": "system_program"
-          }
-        ],
-        "args": [
-          {
-            "name": "account_seeds",
-            "type": {
-              "vec": "bytes"
-            }
-          }
-        ]
-      },
-      {
-        "name": "register_machine",
-        "discriminator": [
-          168,
-          160,
-          68,
-          209,
-          28,
-          151,
-          41,
-          17
-        ],
-        "accounts": [
-          {
-            "name": "system_state",
-            "writable": true
-          },
-          {
-            "name": "machine",
-            "writable": true,
-            "signer": true
-          },
-          {
-            "name": "user",
-            "writable": true,
-            "signer": true
-          },
-          {
-            "name": "system_program",
-            "address": "11111111111111111111111111111111"
-          }
-        ],
-        "args": [
-          {
-            "name": "machine_id",
-            "type": "string"
-          }
-        ]
-      },
-      {
-        "name": "start_machine",
-        "discriminator": [
-          121,
-          244,
-          42,
-          69,
-          36,
-          146,
-          206,
-          127
-        ],
-        "accounts": [
-          {
-            "name": "machine",
-            "writable": true
-          },
-          {
-            "name": "user",
-            "signer": true
-          }
-        ],
-        "args": []
-      },
-      {
-        "name": "stop_machine",
-        "discriminator": [
-          191,
-          189,
-          244,
-          250,
-          83,
-          220,
-          186,
-          32
-        ],
-        "accounts": [
-          {
-            "name": "machine",
-            "writable": true
-          },
-          {
-            "name": "user",
-            "signer": true
-          }
-        ],
-        "args": []
-      },
-      {
-        "name": "undelegate",
-        "docs": [
-          "Undelegate the account from the delegation program"
-        ],
-        "discriminator": [
-          131,
-          148,
-          180,
-          198,
-          91,
-          104,
-          42,
-          238
-        ],
-        "accounts": [
-          {
-            "name": "payer",
-            "writable": true,
-            "signer": true
-          },
-          {
-            "name": "pda",
-            "writable": true
-          },
-          {
-            "name": "magic_program",
-            "address": "Magic11111111111111111111111111111111111111"
-          },
-          {
-            "name": "magic_context",
-            "writable": true,
-            "address": "MagicContext1111111111111111111111111111111"
-          }
-        ],
-        "args": []
-      },
-      {
-        "name": "upload_data",
-        "discriminator": [
-          71,
-          186,
-          8,
-          42,
-          188,
-          75,
-          135,
-          230
-        ],
-        "accounts": [
-          {
-            "name": "system_state",
-            "writable": true
-          },
-          {
-            "name": "machine",
-            "writable": true
-          },
-          {
-            "name": "plant",
-            "writable": true
-          },
-          {
-            "name": "data",
-            "writable": true,
-            "signer": true
-          },
-          {
-            "name": "auth_pda",
-            "pda": {
-              "seeds": [
-                {
-                  "kind": "const",
-                  "value": [
-                    109,
-                    97,
-                    99,
-                    104,
-                    105,
-                    110,
-                    101,
-                    45,
-                    97,
-                    117,
-                    116,
-                    104
-                  ]
-                },
-                {
-                  "kind": "account",
-                  "path": "machine.machine_id",
-                  "account": "Machine"
-                }
-              ]
-            }
-          },
-          {
-            "name": "payer",
-            "writable": true,
-            "signer": true
-          },
-          {
-            "name": "system_program",
-            "address": "11111111111111111111111111111111"
-          }
-        ],
-        "args": [
           {
             "name": "temperature",
             "type": "f64"
@@ -579,228 +694,83 @@
             "type": {
               "option": "string"
             }
+          },
+          {
+            "name": "used_count",
+            "type": "u64"
           }
         ]
-      },
-      {
-        "name": "use_data",
-        "discriminator": [
-          245,
-          181,
-          226,
-          28,
-          125,
-          41,
-          221,
-          84
-        ],
-        "accounts": [
+      }
+    },
+    {
+      "name": "IoTData",
+      "type": {
+        "kind": "struct",
+        "fields": [
           {
-            "name": "system_state",
-            "writable": true
+            "name": "machine",
+            "type": "pubkey"
+          },
+          {
+            "name": "plant",
+            "type": "pubkey"
+          },
+          {
+            "name": "data_entries",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "DataEntry"
+                }
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PlantData",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "plant_name",
+            "type": "string"
+          },
+          {
+            "name": "data_count",
+            "type": "u64"
+          },
+          {
+            "name": "image_count",
+            "type": "u64"
+          },
+          {
+            "name": "creation_timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "last_update_timestamp",
+            "type": "i64"
           },
           {
             "name": "machine",
-            "writable": true
+            "type": "pubkey"
           },
           {
-            "name": "data",
-            "writable": true
-          },
-          {
-            "name": "user",
-            "signer": true
+            "name": "bump",
+            "type": "u8"
           }
-        ],
-        "args": []
-      }
-    ],
-    "accounts": [
-      {
-        "name": "IoTData",
-        "discriminator": [
-          254,
-          141,
-          112,
-          46,
-          177,
-          47,
-          45,
-          83
-        ]
-      },
-      {
-        "name": "Machine",
-        "discriminator": [
-          25,
-          102,
-          22,
-          13,
-          58,
-          243,
-          138,
-          79
-        ]
-      },
-      {
-        "name": "PlantData",
-        "discriminator": [
-          168,
-          139,
-          111,
-          70,
-          1,
-          222,
-          84,
-          115
         ]
       }
-    ],
-    "errors": [
-      {
-        "code": 6000,
-        "name": "MachineIdAlreadyExists",
-        "msg": "Machine ID already exists"
-      },
-      {
-        "code": 6001,
-        "name": "Unauthorized",
-        "msg": "Unauthorized operation"
-      },
-      {
-        "code": 6002,
-        "name": "MachineNotActive",
-        "msg": "Machine is not active"
-      },
-      {
-        "code": 6003,
-        "name": "NoRewardsAvailable",
-        "msg": "No rewards available to claim"
-      },
-      {
-        "code": 6004,
-        "name": "UnregisteredPlant",
-        "msg": "Unregistered plant"
-      }
-    ],
-    "types": [
-      {
-        "name": "IoTData",
-        "type": {
-          "kind": "struct",
-          "fields": [
-            {
-              "name": "machine",
-              "type": "pubkey"
-            },
-            {
-              "name": "plant",
-              "type": "pubkey"
-            },
-            {
-              "name": "timestamp",
-              "type": "i64"
-            },
-            {
-              "name": "temperature",
-              "type": "f64"
-            },
-            {
-              "name": "humidity",
-              "type": "f64"
-            },
-            {
-              "name": "image_url",
-              "type": {
-                "option": "string"
-              }
-            },
-            {
-              "name": "used_count",
-              "type": "u64"
-            }
-          ]
-        }
-      },
-      {
-        "name": "Machine",
-        "type": {
-          "kind": "struct",
-          "fields": [
-            {
-              "name": "owner",
-              "type": "pubkey"
-            },
-            {
-              "name": "machine_id",
-              "type": "string"
-            },
-            {
-              "name": "is_active",
-              "type": "bool"
-            },
-            {
-              "name": "data_count",
-              "type": "u64"
-            },
-            {
-              "name": "image_count",
-              "type": "u64"
-            },
-            {
-              "name": "rewards_earned",
-              "type": "u64"
-            },
-            {
-              "name": "last_data_timestamp",
-              "type": "i64"
-            },
-            {
-              "name": "last_image_timestamp",
-              "type": "i64"
-            },
-            {
-              "name": "data_used_count",
-              "type": "u64"
-            },
-            {
-              "name": "auth_bump",
-              "type": "u8"
-            }
-          ]
-        }
-      },
-      {
-        "name": "PlantData",
-        "type": {
-          "kind": "struct",
-          "fields": [
-            {
-              "name": "creator",
-              "type": "pubkey"
-            },
-            {
-              "name": "plant_name",
-              "type": "string"
-            },
-            {
-              "name": "data_count",
-              "type": "u64"
-            },
-            {
-              "name": "image_count",
-              "type": "u64"
-            },
-            {
-              "name": "creation_timestamp",
-              "type": "i64"
-            },
-            {
-              "name": "last_update_timestamp",
-              "type": "i64"
-            }
-          ]
-        }
-      }
-    ]
-  }
+    }
+  ]
+}

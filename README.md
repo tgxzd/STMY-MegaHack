@@ -1,3 +1,16 @@
+# AgroX
+
+## Project Overview
+
+AgroX is a decentralized agricultural data platform that fetches data from Raspberry Pi sensors and stores it on the Solana blockchain. The platform enables:
+
+- Collection of agricultural sensor data using Raspberry Pi devices
+- Secure storage of farming data on the Solana blockchain
+- Access to valuable agricultural insights for users
+- Incentives for data providers who share their sensor data
+
+This creates a marketplace where agricultural data can be shared, accessed, and monetized in a transparent ecosystem.
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

@@ -1,769 +1,920 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import * as anchor from '@coral-xyz/anchor';
-import { Idl, Program } from '@coral-xyz/anchor';
+import { Program } from '@coral-xyz/anchor';
 import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react';
-import { Keypair, PublicKey, SystemProgram } from '@solana/web3.js';
-import { toast } from 'sonner';
+import { PublicKey, SystemProgram } from '@solana/web3.js';
 import idl from '@/contract/idl.json';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-
-// Define a type for error objects
-interface ErrorWithMessage {
-  message?: string;
-}
-
-// Add type information for the Agrox Program
-type AgroxProgram = Program<Idl>;
 
 const TestPage = () => {
   const { connection } = useConnection();
   const wallet = useAnchorWallet();
-  const [program, setProgram] = useState<AgroxProgram | null>(null);
-  const [systemStatePubkey, setSystemStatePubkey] = useState<PublicKey | null>(null);
-  
-  // State variables for various functions
-  const [plantName, setPlantName] = useState('');
-  const [machineId, setMachineId] = useState('');
-  const [temperature, setTemperature] = useState('25.0');
-  const [humidity, setHumidity] = useState('60.0');
-  const [imageUrl, setImageUrl] = useState('');
-  const [selectedPlant, setSelectedPlant] = useState<PublicKey | null>(null);
-  const [selectedMachine, setSelectedMachine] = useState<PublicKey | null>(null);
-  const [selectedData, setSelectedData] = useState<PublicKey | null>(null);
-  
-  // Lists for created entities
-  const [plants, setPlants] = useState<{pubkey: PublicKey, name: string}[]>([]);
-  const [machines, setMachines] = useState<{pubkey: PublicKey, id: string}[]>([]);
-  const [dataEntries, setDataEntries] = useState<{pubkey: PublicKey, temp: string, humidity: string}[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [activeTab, setActiveTab] = useState("initialize");
+  const [machineData, setMachineData] = useState<{
+    humidity: number;
+    temperature_c: number;
+    temperature_f: number;
+    timestamp: number;
+  } | null>(null);
+  const [machineImage, setMachineImage] = useState<string | null>(null);
 
-  // Initialize program when wallet connects
-  useEffect(() => {
-    if (!wallet || !connection) return;
-    
-    try {
-      // Create provider and program
-      const provider = new anchor.AnchorProvider(
-        connection,
-        wallet,
-        { commitment: 'confirmed' }
-      );
-      
-      const programId = new PublicKey(idl.address);
-      const program = new anchor.Program(idl, provider);
-      setProgram(program as AgroxProgram);
-      
-      // Calculate system state pubkey
-      // In a real application, you'd retrieve this from somewhere or use a known seed
-      const systemStateKeypair = Keypair.generate(); 
-      setSystemStatePubkey(systemStateKeypair.publicKey);
-      
-      console.log('Program initialized with ID:', programId.toString());
-    } catch (error) {
-      console.error('Error initializing program:', error);
-      toast.error('Failed to initialize program');
+  // Get provider and program
+  const getProvider = () => {
+    if (!wallet) {
+      throw new Error("Wallet not connected");
     }
-  }, [wallet, connection]);
-
-  // Helper function to extract error message
-  const getErrorMessage = (error: unknown): string => {
-    if (typeof error === 'string') return error;
-    const typedError = error as ErrorWithMessage;
-    return typedError.message || 'Unknown error';
+    const provider = new anchor.AnchorProvider(
+      connection,
+      wallet,
+      { commitment: "processed" }
+    );
+    return provider;
   };
 
-  // 1. Initialize System
-  const handleInitialize = async () => {
-    if (!program || !wallet || !systemStatePubkey) {
-      toast.error('Program not initialized or wallet not connected');
-      return;
-    }
+  const getProgram = () => {
+    const provider = getProvider();
+    const program = new Program(idl as anchor.Idl, provider);
+    return program;
+  };
 
+  // Initialize the contract
+  const initialize = async () => {
     try {
-      const systemStateKeypair = Keypair.generate(); 
-      setSystemStatePubkey(systemStateKeypair.publicKey);
+      setLoading(true);
+      setMessage("Initializing...");
+      
+      const program = getProgram();
+      const provider = getProvider();
+      
+      // Updated PDA seed
+      const [clusterPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("cluster")],
+        program.programId
+      );
       
       const tx = await program.methods
         .initialize()
         .accounts({
-          systemState: systemStateKeypair.publicKey,
-          authority: wallet.publicKey,
+          cluster: clusterPDA,
+          authority: provider.wallet.publicKey,
           systemProgram: SystemProgram.programId
         })
-        .signers([systemStateKeypair])
         .rpc();
       
-      toast.success('System initialized successfully');
-      console.log('Transaction signature:', tx);
-    } catch (error) {
-      console.error('Error initializing system:', error);
-      toast.error(`Initialization failed: ${getErrorMessage(error)}`);
+      setMessage(`Successfully initialized! TX: ${tx}`);
+    } catch (error: unknown) {
+      console.error("Error initializing:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // 2. Create Plant
-  const handleCreatePlant = async () => {
-    if (!program || !wallet || !systemStatePubkey || !plantName) {
-      toast.error('Missing required information');
-      return;
-    }
-
+  // Delegate the account to delegation program
+  const delegateAccount = async () => {
     try {
-      const plantKeypair = Keypair.generate();
+      setLoading(true);
+      setMessage("Delegating account...");
+      
+      const program = getProgram();
+      const provider = getProvider();
+      
+      // Get cluster PDA
+      const [clusterPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("cluster")],
+        program.programId
+      );
       
       const tx = await program.methods
-        .createPlant(plantName)
+        .delegate()
         .accounts({
-          systemState: systemStatePubkey,
-          plant: plantKeypair.publicKey,
-          user: wallet.publicKey,
-          systemProgram: SystemProgram.programId
+          payer: provider.wallet.publicKey,
+          pda: clusterPDA
         })
-        .signers([plantKeypair])
         .rpc();
       
-      setPlants([...plants, {pubkey: plantKeypair.publicKey, name: plantName}]);
-      setPlantName('');
-      toast.success('Plant created successfully');
-      console.log('Transaction signature:', tx);
-    } catch (error) {
-      console.error('Error creating plant:', error);
-      toast.error(`Create plant failed: ${getErrorMessage(error)}`);
+      setMessage(`Successfully delegated! TX: ${tx}`);
+    } catch (error: unknown) {
+      console.error("Error delegating:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // 3. Register Machine
-  const handleRegisterMachine = async () => {
-    if (!program || !wallet || !systemStatePubkey || !machineId) {
-      toast.error('Missing required information');
-      return;
-    }
-
+  // Undelegate the account from delegation program
+  const undelegateAccount = async () => {
     try {
-      const machineKeypair = Keypair.generate();
+      setLoading(true);
+      setMessage("Undelegating account...");
+      
+      const program = getProgram();
+      const provider = getProvider();
+      
+      // Get cluster PDA
+      const [clusterPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("cluster")],
+        program.programId
+      );
+      
+      // Note: The magic_context and magic_program accounts would need to be properly defined
+      // based on the actual delegate program infrastructure
+      const tx = await program.methods
+        .undelegate()
+        .accounts({
+          payer: provider.wallet.publicKey,
+          pda: clusterPDA,
+          magicContext: new PublicKey("MagicContext1111111111111111111111111111111"),
+          magicProgram: new PublicKey("Magic11111111111111111111111111111111111111"),
+        })
+        .rpc();
+      
+      setMessage(`Successfully undelegated! TX: ${tx}`);
+    } catch (error: unknown) {
+      console.error("Error undelegating:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Register a new machine
+  const registerMachine = async (machineId: string) => {
+    try {
+      setLoading(true);
+      setMessage(`Registering machine ${machineId}...`);
+      
+      const program = getProgram();
+      const provider = getProvider();
+      
+      // Get cluster PDA
+      const [clusterPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("cluster")],
+        program.programId
+      );
+      
+      // Machine PDA with correct seed
+      const [machinePDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        program.programId
+      );
       
       const tx = await program.methods
         .registerMachine(machineId)
         .accounts({
-          systemState: systemStatePubkey,
-          machine: machineKeypair.publicKey,
-          user: wallet.publicKey,
+          cluster: clusterPDA,
+          machine: machinePDA,
+          user: provider.wallet.publicKey,
           systemProgram: SystemProgram.programId
         })
-        .signers([machineKeypair])
         .rpc();
       
-      setMachines([...machines, {pubkey: machineKeypair.publicKey, id: machineId}]);
-      setMachineId('');
-      toast.success('Machine registered successfully');
-      console.log('Transaction signature:', tx);
-    } catch (error) {
-      console.error('Error registering machine:', error);
-      toast.error(`Register machine failed: ${getErrorMessage(error)}`);
+      setMessage(`Machine registered successfully! TX: ${tx}`);
+    } catch (error: unknown) {
+      console.error("Error registering machine:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // 4. Start Machine
-  const handleStartMachine = async () => {
-    if (!program || !wallet || !selectedMachine) {
-      toast.error('No machine selected');
-      return;
-    }
-
+  // Create a new plant
+  const createPlant = async (machineId: string, plantName: string) => {
     try {
+      setLoading(true);
+      setMessage(`Creating plant ${plantName} for machine ${machineId}...`);
+      
+      const program = getProgram();
+      const provider = getProvider();
+      
+      // Get cluster PDA
+      const [clusterPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("cluster")],
+        program.programId
+      );
+      
+      // Machine PDA
+      const [machinePDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        program.programId
+      );
+      
+      // Plant PDA with updated seed - now using plant name instead of machine id
+      const [plantPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("plant"), Buffer.from(plantName)],
+        program.programId
+      );
+      
+      const tx = await program.methods
+        .createPlant(plantName)
+        .accounts({
+          cluster: clusterPDA,
+          plant: plantPDA,
+          machine: machinePDA,
+          user: provider.wallet.publicKey,
+          systemProgram: SystemProgram.programId
+        })
+        .rpc();
+      
+      setMessage(`Plant created successfully! TX: ${tx}`);
+    } catch (error: unknown) {
+      console.error("Error creating plant:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Start a machine
+  const startMachine = async (machineId: string) => {
+    try {
+      setLoading(true);
+      setMessage(`Starting machine ${machineId}...`);
+      
+      const program = getProgram();
+      const provider = getProvider();
+      
+      // Machine PDA
+      const [machinePDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        program.programId
+      );
+      
+      // First call the Solana program
       const tx = await program.methods
         .startMachine()
         .accounts({
-          machine: selectedMachine,
-          user: wallet.publicKey
+          machine: machinePDA,
+          user: provider.wallet.publicKey
         })
         .rpc();
       
-      toast.success('Machine started successfully');
-      console.log('Transaction signature:', tx);
-    } catch (error) {
-      console.error('Error starting machine:', error);
-      toast.error(`Start machine failed: ${getErrorMessage(error)}`);
+      // Then make API call to physically turn on the machine
+      try {
+        const response = await fetch('http://192.168.1.174:8000/api/control/on', {
+          method: 'GET',
+        });
+        
+        if (!response.ok) {
+          console.warn(`API warning: ${response.status}`);
+        }
+      } catch (apiError) {
+        // Log but don't throw to ensure Solana transaction is still considered successful
+        console.warn('API call to control machine failed:', apiError);
+      }
+      
+      setMessage(`Machine started successfully! TX: ${tx}`);
+      
+      // Fetch and display data after turning on
+      fetchMachineData(machineId);
+    } catch (error: unknown) {
+      console.error("Error starting machine:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // 5. Stop Machine
-  const handleStopMachine = async () => {
-    if (!program || !wallet || !selectedMachine) {
-      toast.error('No machine selected');
-      return;
-    }
-
+  // Stop a machine
+  const stopMachine = async (machineId: string) => {
     try {
+      setLoading(true);
+      setMessage(`Stopping machine ${machineId}...`);
+      
+      const program = getProgram();
+      const provider = getProvider();
+      
+      // Machine PDA
+      const [machinePDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        program.programId
+      );
+      
+      // First call the Solana program
       const tx = await program.methods
         .stopMachine()
         .accounts({
-          machine: selectedMachine,
-          user: wallet.publicKey
+          machine: machinePDA,
+          user: provider.wallet.publicKey
         })
         .rpc();
       
-      toast.success('Machine stopped successfully');
-      console.log('Transaction signature:', tx);
-    } catch (error) {
-      console.error('Error stopping machine:', error);
-      toast.error(`Stop machine failed: ${getErrorMessage(error)}`);
-    }
-  };
-
-  // 6. Generate Machine Auth
-  const handleGenerateMachineAuth = async () => {
-    if (!program || !wallet || !selectedMachine || !machineId) {
-      toast.error('Missing required information');
-      return;
-    }
-
-    try {
-      // Calculate auth PDA
-      const [authPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from('machine-auth'), Buffer.from(machineId)],
-        program.programId
-      );
-      
-      const tx = await program.methods
-        .generateMachineAuth(machineId)
-        .accounts({
-          machine: selectedMachine,
-          user: wallet.publicKey,
-          authPda,
-          systemProgram: SystemProgram.programId
-        })
-        .rpc();
-      
-      toast.success('Machine auth generated successfully');
-      console.log('Transaction signature:', tx);
-    } catch (error) {
-      console.error('Error generating machine auth:', error);
-      toast.error(`Generate machine auth failed: ${getErrorMessage(error)}`);
-    }
-  };
-
-  // 7. Upload Data
-  const handleUploadData = async () => {
-    if (!program || !wallet || !selectedMachine || !selectedPlant || !temperature || !humidity) {
-      toast.error('Missing required information');
-      return;
-    }
-
-    try {
-      const dataKeypair = Keypair.generate();
-      
-      // Calculate auth PDA for the selected machine
-      const machine = selectedMachine && machines.find(m => m.pubkey.equals(selectedMachine));
-      if (!machine) {
-        toast.error('Machine information not found');
-        return;
+      // Then make API call to physically turn off the machine
+      try {
+        const response = await fetch('http://192.168.1.174:8000/api/control/off', {
+          method: 'GET',
+        });
+        
+        if (!response.ok) {
+          console.warn(`API warning: ${response.status}`);
+        }
+      } catch (apiError) {
+        // Log but don't throw to ensure Solana transaction is still considered successful
+        console.warn('API call to control machine failed:', apiError);
       }
       
-      const [authPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from('machine-auth'), Buffer.from(machine.id)],
+      setMessage(`Machine stopped successfully! TX: ${tx}`);
+      
+      // Clear machine data display when turned off
+      setMachineData(null);
+      setMachineImage(null);
+    } catch (error: unknown) {
+      console.error("Error stopping machine:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Fetch machine data (sensor data and image)
+  const fetchMachineData = async (machineId: string) => {
+    try {
+      setLoading(true);
+      setMessage(`Fetching data for machine ${machineId}...`);
+      
+      // Fetch sensor data
+      try {
+        const sensorResponse = await fetch('http://192.168.1.174:8000/api/sensor', {
+          method: 'GET',
+          // Add CORS mode to handle cross-origin issues
+          // mode: 'cors',
+        });
+        
+        if (sensorResponse.ok) {
+          const sensorData = await sensorResponse.json();
+          setMachineData(sensorData);
+        } else {
+          console.warn(`Sensor API warning: ${sensorResponse.status}`);
+        }
+      } catch (sensorError) {
+        console.warn('Failed to fetch sensor data:', sensorError);
+        // Continue to try fetching the image even if sensor data fails
+      }
+      
+      // Fetch latest image
+      try {
+        const imageResponse = await fetch('http://192.168.1.174:8000/api/images/latest', {
+          method: 'GET',
+          // Add CORS mode to handle cross-origin issues
+          mode: 'cors',
+        });
+        
+        if (imageResponse.ok) {
+          // Get image URL or blob
+          const imageBlob = await imageResponse.blob();
+          const imageUrl = URL.createObjectURL(imageBlob);
+          setMachineImage(imageUrl);
+        } else {
+          console.warn(`Image API warning: ${imageResponse.status}`);
+        }
+      } catch (imageError) {
+        console.warn('Failed to fetch image:', imageError);
+      }
+      
+      setMessage(`Data fetched successfully for machine ${machineId}`);
+    } catch (error: unknown) {
+      console.error("Error fetching machine data:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Upload data from a machine
+  const uploadData = async (
+    machineId: string, 
+    plantName: string, 
+    temperature: number, 
+    humidity: number, 
+    imageUrl?: string
+  ) => {
+    try {
+      setLoading(true);
+      setMessage(`Uploading data for machine ${machineId}...`);
+      
+      const program = getProgram();
+      const provider = getProvider();
+      
+      // Get cluster PDA
+      const [clusterPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("cluster")],
         program.programId
       );
       
-      const imageUrlOption = imageUrl ? imageUrl : null;
+      // Machine PDA
+      const [machinePDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        program.programId
+      );
+      
+      // Plant PDA with updated seed
+      const [plantPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("plant"), Buffer.from(plantName)],
+        program.programId
+      );
+      
+      // Data PDA with correct seeds - machine ID and plant name
+      const [dataPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("data"), Buffer.from(machineId), Buffer.from(plantName)],
+        program.programId
+      );
       
       const tx = await program.methods
-        .uploadData(
-          parseFloat(temperature), 
-          parseFloat(humidity), 
-          imageUrlOption
-        )
+        .uploadData(temperature, humidity, imageUrl || null)
         .accounts({
-          systemState: systemStatePubkey,
-          machine: selectedMachine,
-          plant: selectedPlant,
-          data: dataKeypair.publicKey,
-          authPda,
-          payer: wallet.publicKey,
+          cluster: clusterPDA,
+          machine: machinePDA,
+          plant: plantPDA,
+          data: dataPDA,
+          payer: provider.wallet.publicKey,
           systemProgram: SystemProgram.programId
         })
-        .signers([dataKeypair])
         .rpc();
       
-      setDataEntries([...dataEntries, {
-        pubkey: dataKeypair.publicKey, 
-        temp: temperature,
-        humidity: humidity
-      }]);
-      
-      toast.success('Data uploaded successfully');
-      console.log('Transaction signature:', tx);
-    } catch (error) {
-      console.error('Error uploading data:', error);
-      toast.error(`Upload data failed: ${getErrorMessage(error)}`);
+      setMessage(`Data uploaded successfully! TX: ${tx}`);
+    } catch (error: unknown) {
+      console.error("Error uploading data:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // 8. Use Data
-  const handleUseData = async () => {
-    if (!program || !wallet || !selectedMachine || !selectedData || !systemStatePubkey) {
-      toast.error('Missing required information');
-      return;
-    }
-
+  // Use data from a specific entry
+  const handleDataUsage = async (machineId: string, plantName: string, entryIndex: number) => {
     try {
+      setLoading(true);
+      setMessage(`Using data entry ${entryIndex} from machine ${machineId}...`);
+      
+      const program = getProgram();
+      const provider = getProvider();
+      
+      // Get cluster PDA
+      const [clusterPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("cluster")],
+        program.programId
+      );
+      
+      // Machine PDA
+      const [machinePDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        program.programId
+      );
+      
+      // Data PDA with correct seeds
+      const [dataPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("data"), Buffer.from(machineId), Buffer.from(plantName)],
+        program.programId
+      );
+      
       const tx = await program.methods
-        .useData()
+        .useData(new anchor.BN(entryIndex))
         .accounts({
-          systemState: systemStatePubkey,
-          machine: selectedMachine,
-          data: selectedData,
-          user: wallet.publicKey
+          cluster: clusterPDA,
+          machine: machinePDA,
+          data: dataPDA,
+          user: provider.wallet.publicKey
         })
         .rpc();
       
-      toast.success('Data used successfully');
-      console.log('Transaction signature:', tx);
-    } catch (error) {
-      console.error('Error using data:', error);
-      toast.error(`Use data failed: ${getErrorMessage(error)}`);
+      setMessage(`Data used successfully! TX: ${tx}`);
+    } catch (error: unknown) {
+      console.error("Error using data:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // 9. Claim Rewards
-  const handleClaimRewards = async () => {
-    if (!program || !wallet || !selectedMachine) {
-      toast.error('No machine selected');
-      return;
-    }
-
+  // Claim rewards for a machine
+  const claimRewards = async (machineId: string) => {
     try {
+      setLoading(true);
+      setMessage(`Claiming rewards for machine ${machineId}...`);
+      
+      const program = getProgram();
+      const provider = getProvider();
+      
+      // Machine PDA
+      const [machinePDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        program.programId
+      );
+      
       const tx = await program.methods
         .claimRewards()
         .accounts({
-          machine: selectedMachine,
-          user: wallet.publicKey
+          machine: machinePDA,
+          user: provider.wallet.publicKey
         })
         .rpc();
       
-      toast.success('Rewards claimed successfully');
-      console.log('Transaction signature:', tx);
-    } catch (error) {
-      console.error('Error claiming rewards:', error);
-      toast.error(`Claim rewards failed: ${getErrorMessage(error)}`);
+      setMessage(`Rewards claimed successfully! TX: ${tx}`);
+    } catch (error: unknown) {
+      console.error("Error claiming rewards:", error);
+      setMessage(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Wallet Connection Check
-  if (!wallet) {
-    return (
-      <div className="container mx-auto p-8 text-center">
-        <Card>
-          <CardHeader>
-            <CardTitle>Wallet Not Connected</CardTitle>
-            <CardDescription>
-              Please connect your wallet to test the smart contract functions.
-            </CardDescription>
-          </CardHeader>
-        </Card>
+  // Tab Content Components
+  const InitializationTab = () => (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Initialization</h2>
+      <p className="text-gray-600">Initialize the AgroX contract with a new cluster.</p>
+      <button 
+        onClick={initialize} 
+        className="w-full bg-gradient-to-r from-green-400 to-blue-500 text-white px-6 py-3 rounded-md shadow-md hover:shadow-lg transition-all duration-200 font-medium"
+        disabled={loading}
+      >
+        Initialize Contract
+      </button>
+    </div>
+  );
+
+  const DelegationTab = () => (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Account Delegation</h2>
+      <p className="text-gray-600">Manage account delegation to the delegation program.</p>
+      <div className="flex gap-4">
+        <button 
+          onClick={delegateAccount} 
+          className="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-4 py-3 rounded-md shadow-md transition-colors duration-200"
+          disabled={loading}
+        >
+          Delegate
+        </button>
+        <button 
+          onClick={undelegateAccount} 
+          className="flex-1 bg-red-500 hover:bg-red-600 text-white px-4 py-3 rounded-md shadow-md transition-colors duration-200"
+          disabled={loading}
+        >
+          Undelegate
+        </button>
       </div>
-    );
-  }
+    </div>
+  );
 
-  return (
-    <div className="container mx-auto p-4 space-y-8">
-      <h1 className="text-3xl font-bold text-center mb-6">AgroX Contract Test Interface</h1>
+  const MachineTab = () => (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Machine Management</h2>
+      <p className="text-gray-600">Register and control your IoT machines.</p>
+      <div className="space-y-3">
+        <div className="relative">
+          <label htmlFor="machineId" className="block text-sm font-medium text-gray-700 mb-1">Machine ID</label>
+          <input 
+            type="text" 
+            id="machineId" 
+            placeholder="Enter machine identifier" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <div className="grid grid-cols-3 gap-2 mt-2">
+          <button 
+            onClick={() => registerMachine((document.getElementById('machineId') as HTMLInputElement).value)} 
+            className="bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+            disabled={loading}
+          >
+            Register
+          </button>
+          <button 
+            onClick={() => startMachine((document.getElementById('machineId') as HTMLInputElement).value)} 
+            className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+            disabled={loading}
+          >
+            Start
+          </button>
+          <button 
+            onClick={() => stopMachine((document.getElementById('machineId') as HTMLInputElement).value)} 
+            className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+            disabled={loading}
+          >
+            Stop
+          </button>
+        </div>
+      </div>
       
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>System Information</CardTitle>
-          <CardDescription>Initialize the system or view current state</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div>
-              <Label>System State Address</Label>
-              <p className="text-sm font-mono bg-muted p-2 rounded-md overflow-auto">
-                {systemStatePubkey ? systemStatePubkey.toString() : 'Not initialized'}
-              </p>
+      {/* Machine data display section */}
+      {machineData && (
+        <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900 mb-3">Machine Data</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Sensor data */}
+            <div className="bg-white p-4 rounded-md shadow-sm">
+              <h4 className="text-md font-medium text-gray-700 mb-2">Sensor Readings</h4>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Temperature:</span>
+                  <span className="font-medium">{machineData.temperature_c}°C / {machineData.temperature_f}°F</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Humidity:</span>
+                  <span className="font-medium">{machineData.humidity}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Timestamp:</span>
+                  <span className="font-medium">{new Date(machineData.timestamp * 1000).toLocaleString()}</span>
+                </div>
+              </div>
             </div>
-            <div>
-              <Label>Connected Wallet</Label>
-              <p className="text-sm font-mono bg-muted p-2 rounded-md overflow-auto">
-                {wallet.publicKey.toString()}
-              </p>
-            </div>
+            
+            {/* Machine image */}
+            {machineImage && (
+              <div className="bg-white p-4 rounded-md shadow-sm">
+                <h4 className="text-md font-medium text-gray-700 mb-2">Latest Image</h4>
+                <div className="relative h-40 overflow-hidden rounded-md">
+                  <img 
+                    src={machineImage} 
+                    alt="Machine camera feed" 
+                    className="object-cover w-full h-full"
+                  />
+                </div>
+              </div>
+            )}
           </div>
-        </CardContent>
-        <CardFooter>
-          <Button onClick={handleInitialize}>Initialize System</Button>
-        </CardFooter>
-      </Card>
+          
+          <button
+            onClick={() => fetchMachineData((document.getElementById('machineId') as HTMLInputElement).value)}
+            className="mt-3 w-full bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+            disabled={loading}
+          >
+            Refresh Data
+          </button>
+        </div>
+      )}
+    </div>
+  );
 
-      <Tabs defaultValue="create" className="space-y-4">
-        <TabsList className="grid grid-cols-3 mb-4">
-          <TabsTrigger value="create">Create & Register</TabsTrigger>
-          <TabsTrigger value="manage">Manage</TabsTrigger>
-          <TabsTrigger value="data">Data & Rewards</TabsTrigger>
-        </TabsList>
-        
-        {/* Create & Register Tab */}
-        <TabsContent value="create" className="space-y-6">
-          {/* Create Plant */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Create Plant</CardTitle>
-              <CardDescription>Register a new plant in the system</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="plantName">Plant Name</Label>
-                <Input 
-                  id="plantName" 
-                  value={plantName} 
-                  onChange={(e) => setPlantName(e.target.value)} 
-                  placeholder="Enter plant name" 
-                />
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button onClick={handleCreatePlant}>Create Plant</Button>
-            </CardFooter>
-          </Card>
-          
-          {/* Register Machine */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Register Machine</CardTitle>
-              <CardDescription>Register a new IoT machine</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="machineId">Machine ID</Label>
-                <Input 
-                  id="machineId" 
-                  value={machineId} 
-                  onChange={(e) => setMachineId(e.target.value)} 
-                  placeholder="Enter unique machine ID" 
-                />
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button onClick={handleRegisterMachine}>Register Machine</Button>
-            </CardFooter>
-          </Card>
-          
-          {/* Display Created Plants and Machines */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Plants</CardTitle>
-                <CardDescription>Created plants</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {plants.length > 0 ? (
-                  <ul className="space-y-2">
-                    {plants.map((plant, index) => (
-                      <li key={index} className="p-2 border rounded-md">
-                        <p className="font-semibold">{plant.name}</p>
-                        <p className="text-xs font-mono truncate">{plant.pubkey.toString()}</p>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-gray-500">No plants created yet</p>
-                )}
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle>Machines</CardTitle>
-                <CardDescription>Registered machines</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {machines.length > 0 ? (
-                  <ul className="space-y-2">
-                    {machines.map((machine, index) => (
-                      <li key={index} className="p-2 border rounded-md">
-                        <p className="font-semibold">{machine.id}</p>
-                        <p className="text-xs font-mono truncate">{machine.pubkey.toString()}</p>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-gray-500">No machines registered yet</p>
-                )}
-              </CardContent>
-            </Card>
+  const PlantTab = () => (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Plant Management</h2>
+      <p className="text-gray-600">Create and manage plants for your machines.</p>
+      <div className="space-y-3">
+        <div className="relative">
+          <label htmlFor="plantMachineId" className="block text-sm font-medium text-gray-700 mb-1">Machine ID</label>
+          <input 
+            type="text" 
+            id="plantMachineId" 
+            placeholder="Enter machine identifier" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <div className="relative">
+          <label htmlFor="plantName" className="block text-sm font-medium text-gray-700 mb-1">Plant Name</label>
+          <input 
+            type="text" 
+            id="plantName" 
+            placeholder="Enter plant name" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <button 
+          onClick={() => createPlant(
+            (document.getElementById('plantMachineId') as HTMLInputElement).value,
+            (document.getElementById('plantName') as HTMLInputElement).value
+          )} 
+          className="w-full bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+          disabled={loading}
+        >
+          Create Plant
+        </button>
+      </div>
+    </div>
+  );
+
+  const DataUploadTab = () => (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Data Upload</h2>
+      <p className="text-gray-600">Upload sensor data and images from your machines.</p>
+      <div className="space-y-3">
+        <div className="relative">
+          <label htmlFor="dataMachineId" className="block text-sm font-medium text-gray-700 mb-1">Machine ID</label>
+          <input 
+            type="text" 
+            id="dataMachineId" 
+            placeholder="Enter machine identifier" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <div className="relative">
+          <label htmlFor="dataPlantName" className="block text-sm font-medium text-gray-700 mb-1">Plant Name</label>
+          <input 
+            type="text" 
+            id="dataPlantName" 
+            placeholder="Enter plant name" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="relative">
+            <label htmlFor="temperature" className="block text-sm font-medium text-gray-700 mb-1">Temperature</label>
+            <input 
+              type="number" 
+              id="temperature" 
+              placeholder="°C" 
+              className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+            />
           </div>
-        </TabsContent>
-        
-        {/* Manage Tab */}
-        <TabsContent value="manage" className="space-y-6">
-          {/* Machine Selection */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Select Machine</CardTitle>
-              <CardDescription>Choose a machine to manage</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {machines.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {machines.map((machine, index) => (
-                    <Button 
-                      key={index}
-                      variant={selectedMachine?.equals(machine.pubkey) ? "default" : "outline"}
-                      onClick={() => setSelectedMachine(machine.pubkey)}
-                      className="justify-start h-auto py-2"
-                    >
-                      <div className="text-left">
-                        <p className="font-semibold">{machine.id}</p>
-                        <p className="text-xs truncate">{machine.pubkey.toString().substring(0, 16)}...</p>
-                      </div>
-                    </Button>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500">No machines registered yet</p>
-              )}
-            </CardContent>
-          </Card>
-          
-          {/* Machine Control */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Machine Control</CardTitle>
-                <CardDescription>Start or stop the selected machine</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex space-x-4">
-                  <Button 
-                    onClick={handleStartMachine}
-                    disabled={!selectedMachine}
-                    className="flex-1"
-                  >
-                    Start Machine
-                  </Button>
-                  <Button 
-                    onClick={handleStopMachine}
-                    disabled={!selectedMachine}
-                    variant="destructive"
-                    className="flex-1"
-                  >
-                    Stop Machine
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle>Machine Authentication</CardTitle>
-                <CardDescription>Generate auth for the selected machine</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="authMachineId">Machine ID</Label>
-                  <Input 
-                    id="authMachineId" 
-                    value={machineId} 
-                    onChange={(e) => setMachineId(e.target.value)} 
-                    placeholder="Enter machine ID for auth" 
-                  />
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Button 
-                  onClick={handleGenerateMachineAuth}
-                  disabled={!selectedMachine || !machineId}
-                >
-                  Generate Auth
-                </Button>
-              </CardFooter>
-            </Card>
+          <div className="relative">
+            <label htmlFor="humidity" className="block text-sm font-medium text-gray-700 mb-1">Humidity</label>
+            <input 
+              type="number" 
+              id="humidity" 
+              placeholder="%" 
+              className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+            />
           </div>
-        </TabsContent>
-        
-        {/* Data & Rewards Tab */}
-        <TabsContent value="data" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Upload Data</CardTitle>
-              <CardDescription>Upload IoT data from a machine to a plant</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Machine and Plant Selection */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Select Machine</Label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-                    {machines.map((machine, index) => (
-                      <Button 
-                        key={index}
-                        variant={selectedMachine?.equals(machine.pubkey) ? "default" : "outline"}
-                        onClick={() => setSelectedMachine(machine.pubkey)}
-                        className="justify-start h-auto py-2"
-                      >
-                        <div className="text-left">
-                          <p className="font-semibold">{machine.id}</p>
-                          <p className="text-xs truncate">{machine.pubkey.toString().substring(0, 8)}...</p>
-                        </div>
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-                
-                <div>
-                  <Label>Select Plant</Label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-                    {plants.map((plant, index) => (
-                      <Button 
-                        key={index}
-                        variant={selectedPlant?.equals(plant.pubkey) ? "default" : "outline"}
-                        onClick={() => setSelectedPlant(plant.pubkey)}
-                        className="justify-start h-auto py-2"
-                      >
-                        <div className="text-left">
-                          <p className="font-semibold">{plant.name}</p>
-                          <p className="text-xs truncate">{plant.pubkey.toString().substring(0, 8)}...</p>
-                        </div>
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              
-              <Separator className="my-2" />
-              
-              {/* Data Input */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="temperature">Temperature (°C)</Label>
-                  <Input 
-                    id="temperature" 
-                    type="number"
-                    value={temperature} 
-                    onChange={(e) => setTemperature(e.target.value)} 
-                    placeholder="e.g. 25.5" 
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="humidity">Humidity (%)</Label>
-                  <Input 
-                    id="humidity" 
-                    type="number"
-                    value={humidity} 
-                    onChange={(e) => setHumidity(e.target.value)} 
-                    placeholder="e.g. 60.5" 
-                  />
-                </div>
-              </div>
-              
-              <div>
-                <Label htmlFor="imageUrl">Image URL (Optional)</Label>
-                <Input 
-                  id="imageUrl" 
-                  value={imageUrl} 
-                  onChange={(e) => setImageUrl(e.target.value)} 
-                  placeholder="https://example.com/image.jpg" 
-                />
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button 
-                onClick={handleUploadData}
-                disabled={!selectedMachine || !selectedPlant || !temperature || !humidity}
-              >
-                Upload Data
-              </Button>
-            </CardFooter>
-          </Card>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Use Data</CardTitle>
-                <CardDescription>Select data to use</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <Label>Select Data Entry</Label>
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {dataEntries.length > 0 ? (
-                      dataEntries.map((data, index) => (
-                        <div 
-                          key={index}
-                          className={`p-2 border rounded-md cursor-pointer ${
-                            selectedData?.equals(data.pubkey) ? 'bg-primary/10 border-primary' : ''
-                          }`}
-                          onClick={() => setSelectedData(data.pubkey)}
-                        >
-                          <p className="text-sm">Temp: {data.temp}°C, Humidity: {data.humidity}%</p>
-                          <p className="text-xs font-mono truncate">{data.pubkey.toString().substring(0, 16)}...</p>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-gray-500">No data entries available</p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Button 
-                  onClick={handleUseData}
-                  disabled={!selectedData || !selectedMachine}
-                >
-                  Use Selected Data
-                </Button>
-              </CardFooter>
-            </Card>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle>Claim Rewards</CardTitle>
-                <CardDescription>Claim rewards from a machine</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <Label>Select Machine to Claim From</Label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {machines.map((machine, index) => (
-                      <Button 
-                        key={index}
-                        variant={selectedMachine?.equals(machine.pubkey) ? "default" : "outline"}
-                        onClick={() => setSelectedMachine(machine.pubkey)}
-                        className="justify-start h-auto py-2"
-                      >
-                        <div className="text-left">
-                          <p className="font-semibold">{machine.id}</p>
-                          <p className="text-xs truncate">{machine.pubkey.toString().substring(0, 16)}...</p>
-                        </div>
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Button 
-                  onClick={handleClaimRewards}
-                  disabled={!selectedMachine}
-                >
-                  Claim Rewards
-                </Button>
-              </CardFooter>
-            </Card>
+        </div>
+        <div className="relative">
+          <label htmlFor="imageUrl" className="block text-sm font-medium text-gray-700 mb-1">Image URL (optional)</label>
+          <input 
+            type="text" 
+            id="imageUrl" 
+            placeholder="Enter image URL" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <button 
+          onClick={() => uploadData(
+            (document.getElementById('dataMachineId') as HTMLInputElement).value,
+            (document.getElementById('dataPlantName') as HTMLInputElement).value,
+            parseFloat((document.getElementById('temperature') as HTMLInputElement).value),
+            parseFloat((document.getElementById('humidity') as HTMLInputElement).value),
+            (document.getElementById('imageUrl') as HTMLInputElement).value
+          )} 
+          className="w-full bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+          disabled={loading}
+        >
+          Upload Data
+        </button>
+      </div>
+    </div>
+  );
+
+  const DataUsageTab = () => (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Data Usage</h2>
+      <p className="text-gray-600">Access data entries and use them in applications.</p>
+      <div className="space-y-3">
+        <div className="relative">
+          <label htmlFor="useDataMachineId" className="block text-sm font-medium text-gray-700 mb-1">Machine ID</label>
+          <input 
+            type="text" 
+            id="useDataMachineId" 
+            placeholder="Enter machine identifier" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <div className="relative">
+          <label htmlFor="useDataPlantName" className="block text-sm font-medium text-gray-700 mb-1">Plant Name</label>
+          <input 
+            type="text" 
+            id="useDataPlantName" 
+            placeholder="Enter plant name" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <div className="relative">
+          <label htmlFor="entryIndex" className="block text-sm font-medium text-gray-700 mb-1">Entry Index</label>
+          <input 
+            type="number" 
+            id="entryIndex" 
+            placeholder="Data entry index" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <button 
+          onClick={() => handleDataUsage(
+            (document.getElementById('useDataMachineId') as HTMLInputElement).value,
+            (document.getElementById('useDataPlantName') as HTMLInputElement).value,
+            parseInt((document.getElementById('entryIndex') as HTMLInputElement).value)
+          )} 
+          className="w-full bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+          disabled={loading}
+        >
+          Use Data
+        </button>
+      </div>
+    </div>
+  );
+
+  const RewardsTab = () => (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Rewards Management</h2>
+      <p className="text-gray-600">Claim rewards earned from your machine data usage.</p>
+      <div className="space-y-3">
+        <div className="relative">
+          <label htmlFor="rewardsMachineId" className="block text-sm font-medium text-gray-700 mb-1">Machine ID</label>
+          <input 
+            type="text" 
+            id="rewardsMachineId" 
+            placeholder="Enter machine identifier" 
+            className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+          />
+        </div>
+        <button 
+          onClick={() => claimRewards(
+            (document.getElementById('rewardsMachineId') as HTMLInputElement).value
+          )} 
+          className="w-full bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+          disabled={loading}
+        >
+          Claim Rewards
+        </button>
+      </div>
+    </div>
+  );
+
+  // Tab configuration
+  const tabs = [
+    { id: "initialize", label: "Initialize", component: InitializationTab },
+    { id: "delegate", label: "Delegation", component: DelegationTab },
+    { id: "machine", label: "Machines", component: MachineTab },
+    { id: "plant", label: "Plants", component: PlantTab },
+    { id: "data", label: "Upload Data", component: DataUploadTab },
+    { id: "usage", label: "Use Data", component: DataUsageTab },
+    { id: "rewards", label: "Rewards", component: RewardsTab }
+  ];
+
+  // Render the current active tab component
+  const renderActiveTab = () => {
+    const tab = tabs.find(t => t.id === activeTab);
+    if (tab) {
+      const TabComponent = tab.component;
+      return <TabComponent />;
+    }
+    return null;
+  };
+
+  // Get status color based on message content
+  const getStatusColor = () => {
+    if (message.includes("Error")) return "bg-red-100 border-red-300 text-red-800";
+    if (message.includes("Success")) return "bg-green-100 border-green-300 text-green-800";
+    return "bg-blue-100 border-blue-300 text-blue-800";
+  };
+
+  // Simple UI with tabs for testing the functions
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-4xl mx-auto">
+        <div className="text-center mb-10">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">AgroX Smart Contract Dashboard</h1>
+          <p className="text-lg text-gray-600">Manage your agricultural IoT data on the blockchain</p>
+        </div>
+
+        {!wallet ? (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+            <h2 className="text-xl font-semibold text-yellow-700 mb-2">Wallet Not Connected</h2>
+            <p className="text-yellow-600 mb-4">Please connect your Solana wallet to interact with the contract.</p>
           </div>
-        </TabsContent>
-      </Tabs>
+        ) : (
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+            {/* Tab navigation */}
+            <div className="flex overflow-x-auto scrollbar-hide border-b border-gray-200">
+              {tabs.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-6 py-4 text-sm font-medium whitespace-nowrap transition-colors ${
+                    activeTab === tab.id 
+                      ? "border-b-2 border-blue-500 text-blue-600"
+                      : "text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Status message */}
+            {message && (
+              <div className={`m-4 p-4 rounded-md border ${getStatusColor()}`}>
+                <p>{message}</p>
+              </div>
+            )}
+
+            {/* Loading indicator */}
+            {loading && (
+              <div className="flex justify-center items-center p-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                <span className="ml-2 text-gray-600">Processing...</span>
+              </div>
+            )}
+
+            {/* Active tab content */}
+            <div className="p-6">
+              {renderActiveTab()}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-8 text-center text-sm text-gray-500">
+          <p>AgroX Contract: Smart agriculture data management on Solana</p>
+        </div>
+      </div>
     </div>
   );
 };
