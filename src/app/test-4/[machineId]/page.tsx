@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { PublicKey } from '@solana/web3.js';
 import * as anchor from '@coral-xyz/anchor';
-import { useWallet, useConnection } from '@solana/wallet-adapter-react';
+import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import {
   Card,
   CardContent,
@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { DownloadIcon } from "lucide-react";
 import { toast } from 'sonner';
+import { getProviderWithPrivateKey } from '@/config/solana';
 
 interface SensorReading {
   temperatureC: number;
@@ -62,6 +63,7 @@ const MachineDetailPage = () => {
   const { connection } = useConnection();
   const { publicKey, signTransaction, signAllTransactions } = useWallet();
   const [program, setProgram] = useState<anchor.Program | null>(null);
+  const [sensorProgram, setSensorProgram] = useState<anchor.Program | null>(null);
   const [machineData, setMachineData] = useState<SensorData | null>(null);
   const [isLoading, setIsLoading] = useState({
     turnOn: false,
@@ -69,41 +71,58 @@ const MachineDetailPage = () => {
   });
   const [dataFetchInterval, setDataFetchInterval] = useState<NodeJS.Timeout | null>(null);
 
+  // Initialize programs - one with wallet for turn on/off, one with private key for sensor data
   useEffect(() => {
+    // Initialize program with wallet for turn on/off operations
     if (publicKey && signTransaction && signAllTransactions) {
-      const wallet = {
-        publicKey,
-        signTransaction,
-        signAllTransactions
-      };
-
-      const provider = new anchor.AnchorProvider(
+      const walletProvider = new anchor.AnchorProvider(
         connection,
-        wallet,
+        {
+          publicKey,
+          signTransaction,
+          signAllTransactions
+        },
         { commitment: 'confirmed' }
       );
 
-      const program = new anchor.Program(
+      const walletProgram = new anchor.Program(
         IDL as anchor.Idl,
-        provider
+        walletProvider
       );
-      setProgram(program);
+      setProgram(walletProgram);
+    }
+
+    // Initialize program with private key for sensor data
+    const privateKey = process.env.NEXT_PUBLIC_PRIVATE_KEY;
+    if (privateKey) {
+      try {
+        const provider = getProviderWithPrivateKey(privateKey);
+        const sensorProgram = new anchor.Program(
+          IDL as anchor.Idl,
+          provider
+        );
+        setSensorProgram(sensorProgram);
+      } catch (error) {
+        console.error('Error initializing sensor program with private key:', error);
+      }
     }
   }, [publicKey, signTransaction, signAllTransactions, connection]);
 
   const fetchMachineData = async () => {
-    if (!program || !publicKey) return;
+    // Use either program instance to fetch data
+    const activeProgram = program || sensorProgram;
+    if (!activeProgram) return;
 
     try {
       const [sensorPDA] = PublicKey.findProgramAddressSync(
         [Buffer.from("machine"), Buffer.from(machineId)],
-        program.programId
+        activeProgram.programId
       );
 
       const account = await connection.getAccountInfo(sensorPDA);
       if (!account) return;
 
-      const accountData = program.coder.accounts.decode(
+      const accountData = activeProgram.coder.accounts.decode(
         'sensorData',
         account.data
       );
@@ -128,13 +147,14 @@ const MachineDetailPage = () => {
   };
 
   useEffect(() => {
-    if (program && publicKey) {
+    const activeProgram = program || sensorProgram;
+    if (activeProgram) {
       fetchMachineData();
     }
-  }, [program, publicKey, machineId]);
+  }, [program, sensorProgram, machineId]);
 
   const fetchAndAddSensorData = async () => {
-    if (!program || !publicKey || !machineData?.isOn) {
+    if (!sensorProgram || !machineData?.isOn) {
       return;
     }
 
@@ -145,14 +165,19 @@ const MachineDetailPage = () => {
 
       const [sensorPDA] = PublicKey.findProgramAddressSync(
         [Buffer.from("machine"), Buffer.from(machineId)],
-        program.programId
+        sensorProgram.programId
       );
 
-      await program.methods
+      const userPublicKey = sensorProgram.provider.publicKey;
+      if (!userPublicKey) {
+        throw new Error('Provider public key not available');
+      }
+
+      await sensorProgram.methods
         .addData(sensorData.temperature_c, sensorData.humidity)
         .accounts({
           sensorData: sensorPDA,
-          user: publicKey,
+          user: userPublicKey,
         })
         .rpc();
 
@@ -187,7 +212,7 @@ const MachineDetailPage = () => {
         clearInterval(dataFetchInterval);
       }
     };
-  }, [machineData?.isOn, program, publicKey]);
+  }, [machineData?.isOn, sensorProgram]);
 
   const turnOnMachine = async () => {
     if (!program || !publicKey) return;
@@ -325,7 +350,7 @@ const MachineDetailPage = () => {
     return (
       <Card>
         <CardContent className="p-6">
-          <p className="text-center">Please connect your wallet to continue</p>
+          <p className="text-center">Please connect your wallet to turn the machine on/off</p>
         </CardContent>
       </Card>
     );
