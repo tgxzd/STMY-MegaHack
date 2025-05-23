@@ -12,6 +12,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import IDL from '@/app/contract-2/idl.json';
 import { useParams } from 'next/navigation';
 
@@ -178,7 +186,7 @@ const MachineDetailPage = () => {
   }
 
   return (
-    <div className="container mx-auto p-4 space-y-6">
+    <div className="container mx-auto p-4 space-y-6 mt-24">
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
@@ -215,13 +223,24 @@ const MachineDetailPage = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {machineData.readings.map((reading, index) => (
-                <div key={index} className="bg-secondary p-3 rounded-lg">
-                  <p>Temperature: {reading.temperatureC}°C</p>
-                  <p>Humidity: {reading.humidity}%</p>
-                  <p>Timestamp: {new Date(reading.timestamp * 1000).toLocaleString()}</p>
-                </div>
-              ))}
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Temperature</TableHead>
+                    <TableHead>Humidity</TableHead>
+                    <TableHead>Timestamp</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {machineData.readings.map((reading, index) => (
+                    <TableRow key={index}>
+                      <TableCell>{reading.temperatureC}°C</TableCell>
+                      <TableCell>{reading.humidity}%</TableCell>
+                      <TableCell>{new Date(reading.timestamp * 1000).toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           </CardContent>
         </Card>
