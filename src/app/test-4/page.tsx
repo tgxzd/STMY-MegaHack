@@ -236,60 +236,6 @@ const TestPage = () => {
     }
   };
 
-  const turnOnMachine = async (machineId: string) => {
-    if (!program || !publicKey) {
-      console.error('Program or wallet not available');
-      return;
-    }
-
-    try {
-      const [sensorPDA] = PublicKey.findProgramAddressSync(
-        [Buffer.from("machine"), Buffer.from(machineId)],
-        program.programId
-      );
-
-      await program.methods
-        .turnOn()
-        .accounts({
-          sensorData: sensorPDA,
-          user: publicKey,
-        })
-        .rpc();
-
-      console.log("Turned on machine:", machineId);
-      await fetchAllMachines();
-    } catch (error) {
-      console.error("Error turning on machine:", error);
-    }
-  };
-
-  const turnOffMachine = async (machineId: string) => {
-    if (!program || !publicKey) {
-      console.error('Program or wallet not available');
-      return;
-    }
-
-    try {
-      const [sensorPDA] = PublicKey.findProgramAddressSync(
-        [Buffer.from("machine"), Buffer.from(machineId)],
-        program.programId
-      );
-
-      await program.methods
-        .turnOff()
-        .accounts({
-          sensorData: sensorPDA,
-          user: publicKey,
-        })
-        .rpc();
-
-      console.log("Turned off machine:", machineId);
-      await fetchAllMachines();
-    } catch (error) {
-      console.error("Error turning off machine:", error);
-    }
-  };
-
   return (
     <div className="container mx-auto p-4 space-y-6">
       <div className="flex justify-between items-center">
@@ -449,68 +395,49 @@ const TestPage = () => {
           <Card className="md:col-span-2">
             <CardHeader>
               <CardTitle>All Machines</CardTitle>
-              <CardDescription>View all machine data</CardDescription>
+              <CardDescription>Click on a machine to view detailed information</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {Object.entries(allMachineData).map(([machineId, data]) => (
-                console.log(data),
-                  <div key={machineId} className="border rounded-lg p-4 space-y-4">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h3 className="text-lg font-semibold mb-2">Machine {machineId}</h3>
-                        <p>Total Readings: {data.totalReadings}</p>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <div className={`w-3 h-3 rounded-full ${data.isOn ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                        <Button
-                          onClick={() => turnOnMachine(machineId)}
-                          variant="default"
-                          disabled={data.isOn}
-                        >
-                          Turn On
-                        </Button>
-                        <Button
-                          onClick={() => turnOffMachine(machineId)}
-                          variant="destructive"
-                          disabled={!data.isOn}
-                        >
-                          Turn Off
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <h4 className="text-md font-semibold mb-2">Sensor Readings</h4>
-                      <div className="grid gap-2">
-                        {data.readings.map((reading, index) => (
-                          <div key={index} className="bg-secondary p-3 rounded-lg">
-                            <p>Temperature: {reading.temperatureC}°C</p>
-                            <p>Humidity: {reading.humidity}%</p>
-                            <p>Timestamp: {new Date(reading.timestamp * 1000).toLocaleString()}</p>
+                  <a 
+                    href={`/test-4/${machineId}`} 
+                    key={machineId} 
+                    className="block transition-transform hover:scale-105"
+                  >
+                    <Card className="h-full">
+                      <CardHeader>
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <CardTitle className="text-lg">Machine {machineId}</CardTitle>
+                            <CardDescription>Total Readings: {data.totalReadings}</CardDescription>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <h4 className="text-md font-semibold mb-2">Images</h4>
-                      <div className="grid gap-4 grid-cols-2">
-                        {data.imageData.map((image, index) => (
-                          <div key={index} className="space-y-2">
-                            <img
-                              src={image.imageUri}
-                              alt={`Sensor image ${index + 1}`}
-                              className="w-full h-48 object-cover rounded-lg"
-                            />
-                            <p className="text-sm">
-                              Uploaded: {new Date(image.timestamp * 1000).toLocaleString()}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                          <div className={`w-3 h-3 rounded-full ${data.isOn ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          {data.readings.length > 0 && (
+                            <div className="bg-secondary p-2 rounded">
+                              <p className="text-sm">Latest Reading:</p>
+                              <p className="text-sm">Temp: {data.readings[data.readings.length - 1].temperatureC}°C</p>
+                              <p className="text-sm">Humidity: {data.readings[data.readings.length - 1].humidity}%</p>
+                            </div>
+                          )}
+                          {data.imageData.length > 0 && (
+                            <div>
+                              <p className="text-sm mb-1">Latest Image:</p>
+                              <img
+                                src={data.imageData[data.imageData.length - 1].imageUri}
+                                alt={`Latest sensor image`}
+                                className="w-full h-32 object-cover rounded"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </a>
                 ))}
               </div>
             </CardContent>
