@@ -22,6 +22,13 @@ import {
 } from "@/components/ui/table";
 import IDL from '@/app/contract-2/idl.json';
 import { useParams } from 'next/navigation';
+import {
+  Dialog,
+  DialogContent,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { DownloadIcon } from "lucide-react";
+import { toast } from 'sonner';
 
 interface SensorReading {
   temperatureC: number;
@@ -56,6 +63,10 @@ const MachineDetailPage = () => {
   const { publicKey, signTransaction, signAllTransactions } = useWallet();
   const [program, setProgram] = useState<anchor.Program | null>(null);
   const [machineData, setMachineData] = useState<SensorData | null>(null);
+  const [isLoading, setIsLoading] = useState({
+    turnOn: false,
+    turnOff: false
+  });
 
   useEffect(() => {
     if (publicKey && signTransaction && signAllTransactions) {
@@ -125,6 +136,7 @@ const MachineDetailPage = () => {
     if (!program || !publicKey) return;
 
     try {
+      setIsLoading(prev => ({ ...prev, turnOn: true }));
       const [sensorPDA] = PublicKey.findProgramAddressSync(
         [Buffer.from("machine"), Buffer.from(machineId)],
         program.programId
@@ -138,9 +150,37 @@ const MachineDetailPage = () => {
         })
         .rpc();
 
+      // Call the external API after successful blockchain transaction
+      try {
+        const response = await fetch('https://machine.hrzhkm.xyz/api/control/on');
+        const data = await response.json();
+        if (!data.camera_active || !data.sensor_active) {
+          toast('Warning: Not all systems turned on', {
+            dismissible: true,
+            duration: 3000
+          });
+        }
+      } catch (apiError) {
+        console.error("Error calling external API:", apiError);
+        toast('Machine state changed but external systems may not be synced', {
+          dismissible: true,
+          duration: 3000
+        });
+      }
+
       await fetchMachineData();
+      toast('Machine turned on successfully', {
+        dismissible: true,
+        duration: 2000
+      });
     } catch (error) {
       console.error("Error turning on machine:", error);
+      toast('Failed to turn on machine', {
+        dismissible: true,
+        duration: 2000
+      });
+    } finally {
+      setIsLoading(prev => ({ ...prev, turnOn: false }));
     }
   };
 
@@ -148,6 +188,7 @@ const MachineDetailPage = () => {
     if (!program || !publicKey) return;
 
     try {
+      setIsLoading(prev => ({ ...prev, turnOff: true }));
       const [sensorPDA] = PublicKey.findProgramAddressSync(
         [Buffer.from("machine"), Buffer.from(machineId)],
         program.programId
@@ -161,10 +202,66 @@ const MachineDetailPage = () => {
         })
         .rpc();
 
+      // Call the external API after successful blockchain transaction
+      try {
+        const response = await fetch('https://machine.hrzhkm.xyz/api/control/off');
+        const data = await response.json();
+        if (data.camera_active || data.sensor_active) {
+          toast('Warning: Some systems still active', {
+            dismissible: true,
+            duration: 3000
+          });
+        }
+      } catch (apiError) {
+        console.error("Error calling external API:", apiError);
+        toast('Machine state changed but external systems may not be synced', {
+          dismissible: true,
+          duration: 3000
+        });
+      }
+
       await fetchMachineData();
+      toast('Machine turned off successfully', {
+        dismissible: true,
+        duration: 2000
+      });
     } catch (error) {
       console.error("Error turning off machine:", error);
+      toast('Failed to turn off machine', {
+        dismissible: true,
+        duration: 2000
+      });
+    } finally {
+      setIsLoading(prev => ({ ...prev, turnOff: false }));
     }
+  };
+
+  const downloadCSV = () => {
+    if (!machineData) return;
+
+    // Create CSV content
+    const headers = ['Temperature (°C)', 'Humidity (%)', 'Timestamp'];
+    const rows = machineData.readings.map(reading => [
+      reading.temperatureC,
+      reading.humidity,
+      new Date(reading.timestamp * 1000).toLocaleString()
+    ]);
+    
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `sensor_data_${machineData.machineId}_${new Date().toISOString()}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   if (!publicKey) {
@@ -187,6 +284,15 @@ const MachineDetailPage = () => {
 
   return (
     <div className="container mx-auto p-4 space-y-6 mt-24">
+      {/* <Toaster 
+        position="top-right" 
+        expand={true} 
+        richColors 
+        closeButton
+        toastOptions={{
+          style: { background: 'white' }
+        }}
+      /> */}
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
@@ -199,16 +305,30 @@ const MachineDetailPage = () => {
               <Button
                 onClick={turnOnMachine}
                 variant="default"
-                disabled={machineData.isOn}
+                disabled={machineData.isOn || isLoading.turnOn || isLoading.turnOff}
               >
-                Turn On
+                {isLoading.turnOn ? (
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                    Turning On...
+                  </div>
+                ) : (
+                  "Turn On"
+                )}
               </Button>
               <Button
                 onClick={turnOffMachine}
                 variant="destructive"
-                disabled={!machineData.isOn}
+                disabled={!machineData.isOn || isLoading.turnOn || isLoading.turnOff}
               >
-                Turn Off
+                {isLoading.turnOff ? (
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                    Turning Off...
+                  </div>
+                ) : (
+                  "Turn Off"
+                )}
               </Button>
             </div>
           </div>
@@ -218,8 +338,21 @@ const MachineDetailPage = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Sensor Readings</CardTitle>
-            <CardDescription>Total Readings: {machineData.totalReadings}</CardDescription>
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle>Sensor Readings</CardTitle>
+                <CardDescription>Total Readings: {machineData.totalReadings}</CardDescription>
+              </div>
+              <Button
+                onClick={downloadCSV}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                <DownloadIcon className="h-4 w-4" />
+                Download CSV
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -251,18 +384,32 @@ const MachineDetailPage = () => {
             <CardDescription>Visual data from the machine</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               {machineData.imageData.map((image, index) => (
-                <div key={index} className="space-y-2">
-                  <img
-                    src={image.imageUri}
-                    alt={`Sensor image ${index + 1}`}
-                    className="w-full h-48 object-cover rounded-lg"
-                  />
-                  <p className="text-sm">
-                    Uploaded: {new Date(image.timestamp * 1000).toLocaleString()}
-                  </p>
-                </div>
+                <Dialog key={index}>
+                  <DialogTrigger asChild>
+                    <div className="cursor-pointer hover:opacity-80 transition-opacity">
+                      <img
+                        src={image.imageUri}
+                        alt={`Sensor image ${index + 1}`}
+                        className="w-full h-32 object-cover rounded-lg"
+                      />
+                      <p className="text-xs mt-1 text-muted-foreground">
+                        {new Date(image.timestamp * 1000).toLocaleString()}
+                      </p>
+                    </div>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-3xl">
+                    <img
+                      src={image.imageUri}
+                      alt={`Sensor image ${index + 1}`}
+                      className="w-full object-contain rounded-lg"
+                    />
+                    <p className="text-sm text-center mt-2">
+                      Uploaded: {new Date(image.timestamp * 1000).toLocaleString()}
+                    </p>
+                  </DialogContent>
+                </Dialog>
               ))}
             </div>
           </CardContent>
