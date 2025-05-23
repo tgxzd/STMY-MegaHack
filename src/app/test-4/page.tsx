@@ -42,6 +42,25 @@ const imageFormSchema = z.object({
   imageUri: z.string().url("Must be a valid URL"),
 });
 
+// Add these types
+interface SensorReading {
+  temperatureC: number;
+  humidity: number;
+  timestamp: anchor.BN;
+}
+
+interface ImageDataType {
+  imageUri: string;
+  timestamp: anchor.BN;
+}
+
+interface SensorDataAccount {
+  readings: SensorReading[];
+  imageData: ImageDataType[];
+  machineId: string;
+  totalReadings: anchor.BN;
+}
+
 interface SensorData {
   machineId: string;
   readings: Array<{
@@ -59,10 +78,10 @@ interface SensorData {
 const TestPage = () => {
   const wallet = useAnchorWallet();
   const [connection] = useState(new Connection(clusterApiUrl('devnet')));
-  const [program, setProgram] = useState<anchor.Program | null>(null);
- 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [program, setProgram] = useState<any>(null);
   const [sensorData, setSensorData] = useState<SensorData | null>(null);
+  const [machineIdToFetch, setMachineIdToFetch] = useState('');
 
   // Forms
   const sensorForm = useForm<z.infer<typeof sensorFormSchema>>({
@@ -84,7 +103,7 @@ const TestPage = () => {
   useEffect(() => {
     if (wallet) {
       const provider = new anchor.AnchorProvider(connection, wallet, {});
-      const program = new anchor.Program(IDL, provider);
+      const program = new anchor.Program(IDL as anchor.Idl, provider)
       setProgram(program);
     }
   }, [wallet, connection]);
@@ -156,6 +175,35 @@ const TestPage = () => {
       console.log("Added image data:", values);
     } catch (error) {
       console.error("Error adding image data:", error);
+    }
+  };
+
+  const fetchSensorData = async (machineId: string) => {
+    if (!program || !wallet) return;
+
+    try {
+      const [sensorPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("machine"), Buffer.from(machineId)],
+        program.programId
+      );
+
+      const account = await program.account.sensorData.fetch(sensorPDA) as SensorDataAccount;
+      setSensorData({
+        machineId: account.machineId,
+        readings: account.readings.map((r: SensorReading) => ({
+          temperatureC: r.temperatureC,
+          humidity: r.humidity,
+          timestamp: r.timestamp.toNumber(),
+        })),
+        imageData: account.imageData.map((img: ImageDataType) => ({
+          imageUri: img.imageUri,
+          timestamp: img.timestamp.toNumber(),
+        })),
+        totalReadings: account.totalReadings.toNumber(),
+      });
+    } catch (error) {
+      console.error("Error fetching sensor data:", error);
+      setSensorData(null);
     }
   };
 
@@ -287,6 +335,69 @@ const TestPage = () => {
                   <Button type="submit">Add Image</Button>
                 </form>
               </Form>
+            </CardContent>
+          </Card>
+
+          {/* Add this new card for fetching and displaying data */}
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle>View Sensor Data</CardTitle>
+              <CardDescription>View readings and images for a specific machine</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex gap-4">
+                  <Input
+                    placeholder="Enter Machine ID"
+                    value={machineIdToFetch}
+                    onChange={(e) => setMachineIdToFetch(e.target.value)}
+                  />
+                  <Button onClick={() => fetchSensorData(machineIdToFetch)}>
+                    Fetch Data
+                  </Button>
+                </div>
+
+                {sensorData && (
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-lg font-semibold mb-2">Machine Details</h3>
+                      <p>Machine ID: {sensorData.machineId}</p>
+                      <p>Total Readings: {sensorData.totalReadings}</p>
+                    </div>
+
+                    <div>
+                      <h3 className="text-lg font-semibold mb-2">Sensor Readings</h3>
+                      <div className="grid gap-2">
+                        {sensorData.readings.map((reading, index) => (
+                          <div key={index} className="bg-secondary p-3 rounded-lg">
+                            <p>Temperature: {reading.temperatureC}°C</p>
+                            <p>Humidity: {reading.humidity}%</p>
+                            <p>Timestamp: {new Date(reading.timestamp * 1000).toLocaleString()}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-lg font-semibold mb-2">Images</h3>
+                      <div className="grid gap-4 grid-cols-2">
+                        {sensorData.imageData.map((image, index) => (
+                          <div key={index} className="space-y-2">
+                            <img
+                              src={image.imageUri}
+                              alt={`Sensor image ${index + 1}`}
+                              className="w-full h-48 object-cover rounded-lg"
+                            />
+                            <p className="text-sm">
+                              Uploaded: {new Date(image.timestamp * 1000).toLocaleString()}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
