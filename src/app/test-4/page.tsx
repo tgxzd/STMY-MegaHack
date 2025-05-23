@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Connection, PublicKey, clusterApiUrl, Keypair } from '@solana/web3.js';
+import React, { useState, useEffect } from 'react';
+import { PublicKey } from '@solana/web3.js';
 import * as anchor from '@coral-xyz/anchor';
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import {
   Card,
   CardContent,
@@ -24,10 +25,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import IDL from '@/app/contract-2/idl.json';
-import bs58 from 'bs58';
-
-// Contract address from your IDL
-// const PROGRAM_ID = new PublicKey("CJ2k7Z7dQZDKmNyiBHqK6zBLCRqcyqA5xHcYUohZgVt4");
 
 // Form schema for sensor data
 const sensorFormSchema = z.object({
@@ -67,32 +64,15 @@ interface SensorData {
     timestamp: number;
   }>;
   totalReadings: number;
-  is_on: boolean;
+  isOn: boolean;
 }
 
-// Add this function to create a keypair from private key
-const createKeypairFromPrivateKey = (privateKeyString: string | undefined) => {
-  if (!privateKeyString) return null;
-  try {
-    const decodedKey = bs58.decode(privateKeyString);
-    return Keypair.fromSecretKey(decodedKey);
-  } catch (error) {
-    console.error('Error creating keypair:', error);
-    return null;
-  }
-};
-
 const TestPage = () => {
-  const [connection] = useState(new Connection(clusterApiUrl('devnet')));
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [program, setProgram] = useState<any>(null);
+  const { connection } = useConnection();
+  const { publicKey, signTransaction, signAllTransactions } = useWallet();
+  const [program, setProgram] = useState<anchor.Program | null>(null);
   const [allMachineData, setAllMachineData] = useState<{ [key: string]: SensorData }>({});
   
-  // Create a keypair from the environment variable
-  const privateKeySigner = useMemo(() => {
-    return createKeypairFromPrivateKey(process.env.NEXT_PUBLIC_PRIVATE_KEY);
-  }, []);
-
   // Forms
   const sensorForm = useForm<z.infer<typeof sensorFormSchema>>({
     resolver: zodResolver(sensorFormSchema),
@@ -112,27 +92,11 @@ const TestPage = () => {
   });
 
   useEffect(() => {
-    if (privateKeySigner) {
+    if (publicKey && signTransaction && signAllTransactions) {
       const wallet = {
-        publicKey: privateKeySigner.publicKey,
-        signTransaction: async <T extends anchor.web3.Transaction | anchor.web3.VersionedTransaction>(tx: T): Promise<T> => {
-          if (tx instanceof anchor.web3.VersionedTransaction) {
-            tx.sign([privateKeySigner]);
-          } else {
-            tx.partialSign(privateKeySigner);
-          }
-          return tx;
-        },
-        signAllTransactions: async <T extends anchor.web3.Transaction | anchor.web3.VersionedTransaction>(txs: T[]): Promise<T[]> => {
-          return txs.map((tx) => {
-            if (tx instanceof anchor.web3.VersionedTransaction) {
-              tx.sign([privateKeySigner]);
-            } else {
-              tx.partialSign(privateKeySigner);
-            }
-            return tx;
-          });
-        },
+        publicKey,
+        signTransaction,
+        signAllTransactions
       };
 
       const provider = new anchor.AnchorProvider(
@@ -147,10 +111,10 @@ const TestPage = () => {
       );
       setProgram(program);
     }
-  }, [privateKeySigner, connection]);
+  }, [publicKey, signTransaction, signAllTransactions, connection]);
 
   const fetchAllMachines = async () => {
-    if (!program || !privateKeySigner) return;
+    if (!program || !publicKey) return;
 
     try {
       const accounts = await connection.getProgramAccounts(program.programId);
@@ -175,7 +139,7 @@ const TestPage = () => {
               timestamp: img.timestamp.toNumber(),
             })),
             totalReadings: accountData.totalReadings.toNumber(),
-            is_on: accountData.is_on,
+            isOn: accountData.isOn,
           };
         } catch (error) {
           console.error("Error decoding account:", error);
@@ -189,13 +153,13 @@ const TestPage = () => {
   };
 
   useEffect(() => {
-    if (program && privateKeySigner) {
+    if (program && publicKey) {
       fetchAllMachines();
     }
-  }, [program, privateKeySigner]);
+  }, [program, publicKey]);
 
   const initializeSensorData = async (machineId: string) => {
-    if (!program || !privateKeySigner) return;
+    if (!program || !publicKey) return;
 
     try {
       const [sensorPDA] = PublicKey.findProgramAddressSync(
@@ -207,7 +171,7 @@ const TestPage = () => {
         .initialize(machineId)
         .accounts({
           sensorData: sensorPDA,
-          user: privateKeySigner.publicKey,
+          user: publicKey,
           systemProgram: anchor.web3.SystemProgram.programId,
         })
         .rpc();
@@ -219,8 +183,8 @@ const TestPage = () => {
   };
 
   const addSensorData = async (values: z.infer<typeof sensorFormSchema>) => {
-    if (!program || !privateKeySigner) {
-      console.error('Program or signer not available');
+    if (!program || !publicKey) {
+      console.error('Program or wallet not available');
       return;
     }
 
@@ -234,9 +198,8 @@ const TestPage = () => {
         .addData(values.temperature, values.humidity)
         .accounts({
           sensorData: sensorPDA,
-          user: privateKeySigner.publicKey,
+          user: publicKey,
         })
-        .signers([privateKeySigner])
         .rpc();
 
       console.log("Added sensor data:", values);
@@ -247,8 +210,8 @@ const TestPage = () => {
   };
 
   const addImageData = async (values: z.infer<typeof imageFormSchema>) => {
-    if (!program || !privateKeySigner) {
-      console.error('Program or signer not available');
+    if (!program || !publicKey) {
+      console.error('Program or wallet not available');
       return;
     }
 
@@ -262,9 +225,8 @@ const TestPage = () => {
         .addImage(values.imageUri)
         .accounts({
           sensorData: sensorPDA,
-          user: privateKeySigner.publicKey,
+          user: publicKey,
         })
-        .signers([privateKeySigner])
         .rpc();
 
       console.log("Added image data:", values);
@@ -275,8 +237,8 @@ const TestPage = () => {
   };
 
   const turnOnMachine = async (machineId: string) => {
-    if (!program || !privateKeySigner) {
-      console.error('Program or signer not available');
+    if (!program || !publicKey) {
+      console.error('Program or wallet not available');
       return;
     }
 
@@ -290,9 +252,8 @@ const TestPage = () => {
         .turnOn()
         .accounts({
           sensorData: sensorPDA,
-          user: privateKeySigner.publicKey,
+          user: publicKey,
         })
-        .signers([privateKeySigner])
         .rpc();
 
       console.log("Turned on machine:", machineId);
@@ -303,8 +264,8 @@ const TestPage = () => {
   };
 
   const turnOffMachine = async (machineId: string) => {
-    if (!program || !privateKeySigner) {
-      console.error('Program or signer not available');
+    if (!program || !publicKey) {
+      console.error('Program or wallet not available');
       return;
     }
 
@@ -318,9 +279,8 @@ const TestPage = () => {
         .turnOff()
         .accounts({
           sensorData: sensorPDA,
-          user: privateKeySigner.publicKey,
+          user: publicKey,
         })
-        .signers([privateKeySigner])
         .rpc();
 
       console.log("Turned off machine:", machineId);
@@ -334,14 +294,14 @@ const TestPage = () => {
     <div className="container mx-auto p-4 space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Sensor Data Management</h1>
-        {privateKeySigner && (
+        {publicKey && (
           <div className="text-sm text-gray-600">
-            Connected with: {privateKeySigner.publicKey.toString()}
+            Connected with: {publicKey.toString()}
           </div>
         )}
       </div>
 
-      {privateKeySigner ? (
+      {publicKey ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Initialize Sensor Data */}
           <Card>
@@ -494,6 +454,7 @@ const TestPage = () => {
             <CardContent>
               <div className="space-y-6">
                 {Object.entries(allMachineData).map(([machineId, data]) => (
+                console.log(data),
                   <div key={machineId} className="border rounded-lg p-4 space-y-4">
                     <div className="flex justify-between items-center">
                       <div>
@@ -501,12 +462,20 @@ const TestPage = () => {
                         <p>Total Readings: {data.totalReadings}</p>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <div className={`w-3 h-3 rounded-full ${data.is_on ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        <div className={`w-3 h-3 rounded-full ${data.isOn ? 'bg-green-500' : 'bg-red-500'}`}></div>
                         <Button
-                          onClick={() => data.is_on ? turnOnMachine(machineId) : turnOffMachine(machineId)}
-                          variant={data.is_on ? "destructive" : "default"}
+                          onClick={() => turnOnMachine(machineId)}
+                          variant="default"
+                          disabled={data.isOn}
                         >
-                          {data.is_on ? 'Turn On' : 'Turn Off'}
+                          Turn On
+                        </Button>
+                        <Button
+                          onClick={() => turnOffMachine(machineId)}
+                          variant="destructive"
+                          disabled={!data.isOn}
+                        >
+                          Turn Off
                         </Button>
                       </div>
                     </div>
